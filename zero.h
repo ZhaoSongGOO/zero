@@ -21,6 +21,7 @@ typedef enum {
   TOKEN_EQUAL,
   TOKEN_ID,
   TOKEN_KEYWORD,
+  TOKEN_ACCESS,        // .
   TOKEN_COMMA,         // ,
   TOKEN_SEMICOLON,     // ;
   TOKEN_LEFT_PARENT,   // (
@@ -34,10 +35,24 @@ typedef enum {
   TOKEN_EOF
 } TOKEN_TYPE;
 
+typedef enum {
+  NUMBER_INT,
+  NUMBER_FLOAT,
+} NUMBER_Type;
+
+struct number {
+  NUMBER_Type type;
+  union {
+    int int_value;
+    double float_value;
+  };
+};
+
 struct token {
   TOKEN_TYPE type;
   union {
-    int int_value;
+    int symbol_index;
+    struct number number_value;
   } value;
 };
 
@@ -161,7 +176,7 @@ bool is_letter(char c) {
 bool is_opcode(char c) {
   return c == '"' || c == ';' || c == ':' || c == '+' || c == '-' || c == '*' ||
          c == '/' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' ||
-         c == '}' || c == '=' || c == ',';
+         c == '}' || c == '=' || c == ',' || c == '.';
 }
 
 bool is_keyword(const char *str) { return strcmp(str, "var") == 0; }
@@ -177,28 +192,49 @@ struct token scanner_letter(struct scanner *s) {
       s->symbol->insert(s->symbol, s->source->content + s->index, size);
   s->index = s->index + size;
   if (is_keyword(s->symbol->get(s->symbol, si)->str)) {
-    return (struct token){.type = TOKEN_KEYWORD, .value = {.int_value = si}};
+    return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
-  return (struct token){.type = TOKEN_ID, .value = {.int_value = si}};
+  return (struct token){.type = TOKEN_ID, .value = {.symbol_index = si}};
 }
 
 struct token scanner_number(struct scanner *s) {
   unsigned int size = 0;
   unsigned int index = s->index;
-  while (is_number(s->source->content[index])) {
+  bool is_float = false;
+  while (is_number(s->source->content[index]) ||
+         s->source->content[index] == '.') {
+    if (s->source->content[index] == '.') {
+      if (is_float) {
+        return (struct token){.type = TOKEN_UNKNOWN};
+      } else {
+        is_float = true;
+      }
+    }
     index++;
     size++;
   }
-  unsigned int value = 0;
-  unsigned int digital = 1;
-  unsigned int patch = 1;
-  while (patch <= size) {
-    value += (s->source->content[index - patch] - '0') * digital;
-    digital *= 10;
-    patch += 1;
+  if (!is_float) {
+    unsigned int value = 0;
+    unsigned int digital = 1;
+    unsigned int patch = 1;
+    while (patch <= size) {
+      value += (s->source->content[index - patch] - '0') * digital;
+      digital *= 10;
+      patch += 1;
+    }
+    s->index += size;
+    return (struct token){
+        .type = TOKEN_NUM,
+        .value = {.number_value =
+                      (struct number){.type = NUMBER_INT, .int_value = value}}};
+  } else {
+    double float_value = strtod(s->source->content + s->index, NULL);
+    s->index += size;
+    return (struct token){
+        .type = TOKEN_NUM,
+        .value = {.number_value = (struct number){.type = NUMBER_FLOAT,
+                                                  .float_value = float_value}}};
   }
-  s->index += size;
-  return (struct token){.type = TOKEN_NUM, .value = {.int_value = value}};
 }
 
 struct token scanner_string(struct scanner *s) {
@@ -216,7 +252,7 @@ struct token scanner_string(struct scanner *s) {
   unsigned int si =
       s->symbol->insert(s->symbol, s->source->content + s->index, size);
   s->index = s->index + size + 1; // +1 to skip '"'
-  return (struct token){.type = TOKEN_STRING, .value = {.int_value = si}};
+  return (struct token){.type = TOKEN_STRING, .value = {.symbol_index = si}};
 }
 
 struct token scanner_opcode(struct scanner *s) {
@@ -264,8 +300,12 @@ struct token scanner_opcode(struct scanner *s) {
   case ',':
     t = (struct token){.type = TOKEN_COMMA};
     break;
+  case '.':
+    t = (struct token){.type = TOKEN_ACCESS};
+    break;
   case '"': // for string
     return scanner_string(s);
+
   default:
     return t;
   }
@@ -377,19 +417,23 @@ void token_print(struct token t, struct scanner *sc) {
   switch (t.type) {
   case TOKEN_KEYWORD:
     printf("TOKEN_KEYWORD:%s\n",
-           sc->symbol->get(sc->symbol, t.value.int_value)->str);
+           sc->symbol->get(sc->symbol, t.value.symbol_index)->str);
     break;
   case TOKEN_ID:
     printf("TOKEN_ID:%s\n",
-           sc->symbol->get(sc->symbol, t.value.int_value)->str);
+           sc->symbol->get(sc->symbol, t.value.symbol_index)->str);
     break;
   case TOKEN_STRING:
     printf("TOKEN_STRING:\"%s\"\n",
-           sc->symbol->get(sc->symbol, t.value.int_value)->str);
+           sc->symbol->get(sc->symbol, t.value.symbol_index)->str);
     break;
-  case TOKEN_NUM:
-    printf("TOKEN_NUM:%d\n", t.value.int_value);
-    break;
+  case TOKEN_NUM: {
+    if (t.value.number_value.type == NUMBER_INT) {
+      printf("TOKEN_NUM:i(%d)\n", t.value.number_value.int_value);
+    } else if (t.value.number_value.type == NUMBER_FLOAT) {
+      printf("TOKEN_NUM:f(%f)\n", t.value.number_value.float_value);
+    }
+  } break;
   case TOKEN_ADD:
     printf("TOKEN_ADD:+\n");
     break;
@@ -431,6 +475,9 @@ void token_print(struct token t, struct scanner *sc) {
     break;
   case TOKEN_COMMA:
     printf("TOKEN_COMMA:, \n");
+    break;
+  case TOKEN_ACCESS:
+    printf("TOKEN_ACCESS:. \n");
     break;
   default:
     printf("TOKEN_UNKNOWN:%d\n", t.type);
