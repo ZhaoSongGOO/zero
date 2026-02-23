@@ -16,10 +16,8 @@
 #   project_api_key = "default_key"
 #
 declare_args() {
-    # ==> Please add your project-specific GN arguments here.
-
+  # ==> Please add your project-specific GN arguments here.
 }
-
 
 # ==============================================================================
 # Project-Level Global Build Configurations

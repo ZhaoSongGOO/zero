@@ -1,9 +1,6 @@
-executable("main"){
-    sources = [
-        "//zero.h",
-        "//main.c"
-    ]
+executable("main") {
+  sources = [
+    "//main.c",
+    "//zero.h",
+  ]
 }
-
-
-
