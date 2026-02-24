@@ -512,7 +512,14 @@ struct syntax_kv_pair {
 };
 
 struct syntax_expr {
-  enum { EXPR_BINARY, EXPR_LITERAL, EXPR_CALL, EXPR_ARRAY, EXPR_OBJECT } type;
+  enum {
+    EXPR_BINARY,
+    EXPR_LITERAL,
+    EXPR_CALL,
+    EXPR_ARRAY,
+    EXPR_OBJECT,
+    EXPR_ID
+  } type;
 
   union {
     struct {
@@ -586,6 +593,13 @@ struct Parser {
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
+struct syntax_expr *parser_term(struct Parser *parser);
+struct syntax_expr *parser_factory(struct Parser *parser);
+struct syntax_expr *parser_call(struct syntax_expr *caller,
+                                struct Parser *parser);
+struct syntax_expr *parser_primary(struct Parser *parser);
+struct syntax_expr *parser_arraylist(struct Parser *parser);
+struct syntax_expr *parser_objectlist(struct Parser *parser);
 struct syntax_expr *parser_expr(struct Parser *parser);
 
 struct syntax_program *parser_program(struct Parser *parser) {
@@ -636,7 +650,145 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
   return statement;
 }
 
-struct syntax_expr *parser_expr(struct Parser *parser) {}
+struct syntax_expr *parser_expr(struct Parser *parser) {
+  struct syntax_expr *term = parser_term(parser);
+  while (parser->sc->cur_token.type == TOKEN_ADD ||
+         parser->sc->cur_token.type == TOKEN_MINUS) {
+    struct token op = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+    struct syntax_expr *right = parser_term(parser);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = term;
+    binary->data.binary_expr.right = right;
+    binary->data.binary_expr.op = op.type;
+    term = binary;
+  }
+  return term;
+}
+
+struct syntax_expr *parser_term(struct Parser *parser) {
+  struct syntax_expr *node = parser_factory(parser);
+  while (parser->sc->cur_token.type == TOKEN_MULTI ||
+         parser->sc->cur_token.type == TOKEN_DIV) {
+    struct token op = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+    struct syntax_expr *right = parser_factory(parser);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = node;
+    binary->data.binary_expr.right = right;
+    binary->data.binary_expr.op = op.type;
+    node = binary;
+  }
+  return node;
+}
+
+struct syntax_expr *parser_factory(struct Parser *parser) {
+  struct syntax_expr *primary = parser_primary(parser);
+  if (parser->sc->cur_token.type == TOKEN_LEFT_PARENT) {
+    primary = parser_call(primary, parser);
+  }
+  return primary;
+}
+
+struct syntax_expr *parser_primary(struct Parser *parser) {
+  switch (parser->sc->cur_token.type) {
+  case TOKEN_NUM: {
+    struct token n = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, TOKEN_NUM);
+    struct syntax_expr *number =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    number->type = EXPR_LITERAL;
+    if (n.value.number_value.type == NUMBER_INT) {
+      number->data.literal_expr.kind = LIT_INT;
+      number->data.literal_expr.int_val = n.value.number_value.int_value;
+    } else if (n.value.number_value.type == NUMBER_FLOAT) {
+      number->data.literal_expr.kind = LIT_FLOAT;
+      number->data.literal_expr.int_val = n.value.number_value.float_value;
+    }
+    return number;
+  }
+  case TOKEN_STRING: {
+    struct token n = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, TOKEN_STRING);
+    struct syntax_expr *str =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    str->type = EXPR_LITERAL;
+    str->data.literal_expr.kind = LIT_STR;
+    str->data.literal_expr.str_val =
+        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index);
+    return str;
+  }
+  case TOKEN_ID: {
+    struct token n = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, TOKEN_ID);
+    struct syntax_expr *id =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    id->type = EXPR_ID;
+    id->data.identifier_expr.name =
+        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index);
+    return id;
+  }
+  case TOKEN_LEFT_BRACKET: // [
+    return parser_arraylist(parser);
+  case TOKEN_LEFT_BRACE: // {
+    return parser_objectlist(parser);
+  case TOKEN_LEFT_PARENT: {
+    expected_token_type_and_run(parser->sc, TOKEN_LEFT_PARENT);
+    struct syntax_expr *expr = parser_expr(parser);
+    expected_token_type_and_run(parser->sc, TOKEN_RIGHT_PARENT);
+    return expr;
+  }
+  default:
+    break;
+  }
+}
+
+struct syntax_expr *parser_call(struct syntax_expr *caller,
+                                struct Parser *parser) {}
+
+struct syntax_expr *parser_arraylist(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACKET);
+  struct syntax_expr *expr =
+      (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+  expr->type = EXPR_ARRAY;
+  expr->data.array_expr.elements = new_vec();
+  do {
+    if (parser->sc->cur_token.type == TOKEN_COMMA) {
+      scanner_run(parser->sc);
+    }
+    expr->data.array_expr.elements->push(expr->data.array_expr.elements,
+                                         parser_expr(parser));
+  } while (parser->sc->cur_token.type == TOKEN_COMMA);
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACKET);
+  return expr;
+}
+
+struct syntax_expr *parser_objectlist(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
+  struct syntax_expr *expr =
+      (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+  expr->type = EXPR_OBJECT;
+  expr->data.object_expr.pairs = new_vec();
+  do {
+    if (parser->sc->cur_token.type == TOKEN_COMMA) {
+      scanner_run(parser->sc);
+    }
+    struct token key = parser->sc->cur_token;
+    struct syntax_kv_pair *pair =
+        (struct syntax_kv_pair *)malloc(sizeof(struct syntax_kv_pair));
+    pair->key =
+        parser->sc->symbol->get(parser->sc->symbol, key.value.symbol_index);
+    expected_token_type_and_run(parser->sc, TOKEN_STRING);
+    expected_token_type_and_run(parser->sc, TOKEN_COLON);
+    pair->value = parser_expr(parser);
+    expr->data.object_expr.pairs->push(expr->data.object_expr.pairs, pair);
+  } while (parser->sc->cur_token.type == TOKEN_COMMA);
+  return expr;
+}
 
 #endif
 #endif
