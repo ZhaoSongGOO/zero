@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "vec.h"
+
 typedef enum {
   TOKEN_UNKNOWN = -1,
   TOKEN_STRING,
@@ -484,6 +486,157 @@ void token_print(struct token t, struct scanner *sc) {
     break;
   }
 }
+
+// Syntax chapter
+#include <assert.h>
+
+void expected_token_type_and_run(struct scanner *sc, TOKEN_TYPE type) {
+  assert(sc->cur_token.type == type);
+  scanner_run(sc);
+}
+
+void expected_token_type_str_value_and_run(struct scanner *sc, TOKEN_TYPE type,
+                                           const char *value) {
+  assert(sc->cur_token.type == type);
+  assert(strcmp(value,
+                sc->symbol->get(sc->symbol, sc->cur_token.value.symbol_index)
+                    ->str) == 0);
+  scanner_run(sc);
+}
+
+struct syntax_expr;
+
+struct syntax_kv_pair {
+  char *key;
+  struct syntax_expr *value;
+};
+
+struct syntax_expr {
+  enum { EXPR_BINARY, EXPR_LITERAL, EXPR_CALL, EXPR_ARRAY, EXPR_OBJECT } type;
+
+  union {
+    struct {
+      struct syntax_expr *left;
+      uint8_t op;
+      struct syntax_expr *right;
+    } binary_expr;
+
+    struct {
+      char *func_name;
+      // struct syntax_expr **args;
+      // uint8_t arg_count;
+      struct Vec *args;
+    } call_expr;
+
+    struct {
+      // struct syntax_expr **elements;
+      // uint8_t count;
+      struct Vec *elements;
+    } array_expr;
+
+    struct {
+      // struct syntax_kv_pair **pairs;
+      // uint8_t count;
+      struct Vec *pairs;
+    } object_expr;
+
+    struct {
+      char *name;
+    } identifier_expr;
+
+    struct {
+      enum { LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL } kind;
+
+      union {
+        int32_t int_val;
+        double float_val;
+        char *str_val;
+        bool bool_val;
+      };
+    } literal_expr;
+  } data;
+};
+
+struct syntax_statement {
+  enum { STMT_VAR_DECL, STMT_EXPR } type;
+
+  union {
+    struct {
+      char *name;
+      struct syntax_expr *initializer;
+    } var_stmt;
+
+    struct {
+      struct syntax_expr *expr;
+    } expr_stmt;
+  } data;
+};
+
+struct syntax_program {
+  // struct syntax_statement **statements;
+  // unsigned int count;
+  // unsigned int capacity;
+  struct Vec *statements;
+};
+
+struct Parser {
+  struct scanner *sc;
+};
+
+struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
+struct syntax_statement *parser_expr_stmt(struct Parser *parser);
+struct syntax_statement *parser_statement(struct Parser *parser);
+struct syntax_expr *parser_expr(struct Parser *parser);
+
+struct syntax_program *parser_program(struct Parser *parser) {
+  struct syntax_program *program =
+      (struct syntax_program *)malloc(sizeof(struct syntax_program));
+  program->statements = new_vec();
+  while (parser->sc->cur_token.type != TOKEN_EOF) {
+    struct syntax_statement *stmt = parser_statement(parser);
+    program->statements->push(program->statements, stmt);
+    expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+  }
+  return program;
+}
+
+struct syntax_statement *parser_statement(struct Parser *parser) {
+  struct token cur_token = parser->sc->cur_token;
+  if (cur_token.type == TOKEN_KEYWORD &&
+      strcmp(parser->sc->symbol
+                 ->get(parser->sc->symbol, cur_token.value.symbol_index)
+                 ->str,
+             "var") == 0) {
+    return parser_var_decl_stmt(parser);
+  }
+  return parser_expr_stmt(parser);
+}
+
+struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
+  expected_token_type_str_value_and_run(parser->sc, TOKEN_KEYWORD, "var");
+  char *id_name =
+      parser->sc->symbol
+          ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
+          ->str;
+  expected_token_type_and_run(parser->sc, TOKEN_EQUAL);
+  struct syntax_expr *expr = parser_expr(parser);
+  struct syntax_statement *statement =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  statement->type = STMT_VAR_DECL;
+  statement->data.var_stmt.initializer = expr;
+  statement->data.var_stmt.name = id_name;
+  return statement;
+}
+
+struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
+  struct syntax_statement *statement =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  statement->type = STMT_EXPR;
+  statement->data.expr_stmt.expr = parser_expr(parser);
+  return statement;
+}
+
+struct syntax_expr *parser_expr(struct Parser *parser) {}
 
 #endif
 #endif

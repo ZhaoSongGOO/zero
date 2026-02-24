@@ -1,6 +1,8 @@
 executable("main") {
   sources = [
     "//main.c",
+    "//vec.c",
+    "//vec.h",
     "//zero.h",
   ]
 }
