@@ -942,20 +942,22 @@ void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   s->insert_raw(s, buf);
 }
 
-void itf(MapPair *pair) {
+void itf(MapPair *pair, void *) {
   int fd = GET_INSTRUCTION_STORE()->fd;
   write(fd, pair->key, strlen(pair->key));
   write(fd, ":\n", 2);
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
     const char *inst = store->get(store, i)->str;
-    write(fd, " ", 1);
+    write(fd, "  ", 2);
     write(fd, inst, strlen(inst));
     write(fd, "\n", 1);
   }
 }
 
-void instruction_to_file() { map_foreach(GET_INSTRUCTION_STORE()->map, itf); }
+void instruction_to_file() {
+  map_foreach(GET_INSTRUCTION_STORE()->map, itf, NULL);
+}
 
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_VAR_DECL);
@@ -1072,7 +1074,8 @@ typedef enum {
   VAL_OBJ_PTR,
   VAL_ARR_PTR,
   VAL_BOOL,
-  VAL_FUNC
+  VAL_FUNC,
+  VAL_REF
 } ValueType;
 
 typedef struct {
@@ -1104,6 +1107,7 @@ typedef enum {
   I_PUSH,
   I_MULTI,
   I_DIV,
+  I_ADD,
   I_MINUS,
   I_LOAD,
   I_STORE,
@@ -1112,6 +1116,8 @@ typedef enum {
 
 struct zero_context {
   Map *symbols; // string -> ZValue
+  struct Vec *cvalues;
+  Map *refs;
   struct zero_context *parent;
 };
 
@@ -1119,52 +1125,266 @@ struct zero_context {
 
 typedef struct {
   INSTRUCTION_CODE code;
-  ZValue v;
+  ZValue *v;
 } INSTRUCTION;
 
+INSTRUCTION *new_inst(INSTRUCTION_CODE code, ZValue *v) {
+  INSTRUCTION *inst = (INSTRUCTION *)malloc(sizeof(INSTRUCTION));
+  inst->code = code;
+  inst->v = v;
+  return inst;
+}
+
 typedef struct {
-  INSTRUCTION *instructions;
+  // INSTRUCTION *instructions;
+  struct Vec *instructions;
   Context *ctx;
+  bool is_builtin;
+  const char *name;
 } ZFunction;
 
 Context *new_context() {
   Context *ctx = (Context *)malloc(sizeof(Context));
   ctx->symbols = new_map();
   ctx->parent = NULL;
+  ctx->cvalues = new_vec();
+  ctx->refs = new_map();
   return ctx;
 }
 
-typedef struct {
+ZFunction *new_function(Context *ctx) {
+  ZFunction *func = (ZFunction *)malloc(sizeof(ZFunction));
+  func->ctx = new_context();
+  func->instructions = new_vec();
+  func->ctx->parent = ctx;
+  func->is_builtin = false;
+  func->name = NULL;
+  return func;
+}
+
+struct zero_vm {
   ZFunction *entry;
   Context *root_context;
   Context *cur_context;
-  void (*Init)();
-  int (*Run)();
-} VM;
+  Map *ready_link;
+};
+#define VM struct zero_vm
 
-void list_inst_store(MapPair *pair) {
+const Map *actions = NULL;
+
+typedef INSTRUCTION *(*action_for_inst)(VM *vm, const char *value);
+
+INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_PUSH_D_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_PUSH_F_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_ADD_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_MINUS_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_MULTI_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_DIV_INSTRUCTION(VM *vm, const char *value);
+
+void init_actions() {
+  actions = (Map *)malloc(sizeof(Map));
+  map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
+  map_insert(actions, "LOAD", NEW_LOAD_INSTRUCTION);
+  map_insert(actions, "PUSH_D", NEW_PUSH_D_INSTRUCTION);
+  map_insert(actions, "PUSH_F", NEW_PUSH_F_INSTRUCTION);
+  map_insert(actions, "PUSH_B", NEW_PUSH_B_INSTRUCTION);
+  map_insert(actions, "PUSH_S", NEW_PUSH_S_INSTRUCTION);
+  map_insert(actions, "CALL", NEW_CALL_INSTRUCTION);
+  map_insert(actions, "ADD", NEW_ADD_INSTRUCTION);
+  map_insert(actions, "MINUS", NEW_MINUS_INSTRUCTION);
+  map_insert(actions, "MULTI", NEW_MULTI_INSTRUCTION);
+  map_insert(actions, "DIV", NEW_DIV_INSTRUCTION);
+}
+
+ZValue *get_builtin_function_value(VM *vm) {
+  ZValue *b_print = (ZValue *)malloc(sizeof(ZValue));
+  b_print->type = VAL_FUNC;
+  ZFunction *func = new_function(vm->cur_context);
+  func->is_builtin = true;
+}
+
+void init_builtin(VM *vm) {
+  map_insert(vm->root_context->symbols, "print",
+             get_builtin_function_value(vm));
+  map_insert(vm->root_context->symbols, "NEW_ARRAY",
+             get_builtin_function_value(vm));
+  map_insert(vm->root_context->symbols, "NEW_OBJECT",
+             get_builtin_function_value(vm));
+}
+
+const Map *GET_ACTIONS() {
+  if (actions == NULL) {
+    init_actions();
+  }
+  return actions;
+}
+
+void list_inst_store(MapPair *pair, void *data) {
+  VM *vm = (VM *)data;
+  ZFunction *f = new_function(vm->cur_context);
+  if (strcmp(pair->key, "main") == 0) {
+    vm->entry = f;
+  }
+  vm->cur_context = f->ctx;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
-    printf("DEBUG: %s\n", store->get(store, i)->str);
+    char *inst_str = store->get(store, i)->str;
+    int len = strcspn(inst_str, " ");
+    inst_str[len] = '\0';
+    INSTRUCTION *inst =
+        ((action_for_inst)(map_get(GET_ACTIONS(), inst_str)->value))(
+            vm, inst_str + len + 1);
+    inst_str[len] = ' ';
+    f->instructions->push(f->instructions, inst);
+  }
+
+  ZValue *value = (ZValue *)malloc(sizeof(ZValue));
+  value->type = VAL_FUNC;
+  value->data.ptr = f;
+  map_insert(vm->root_context->symbols, pair->key, value);
+  vm->cur_context = f->ctx->parent;
+}
+
+void vm_compile_stage(VM *vm) {
+  map_foreach(GET_INSTRUCTION_STORE()->map, list_inst_store, vm);
+}
+
+void vm_link_progress(MapPair *pair, void *data) {
+  VM *vm = (VM *)data;
+  struct Vec *funcs = (struct Vec *)pair->value;
+  for (int i = 0; i < funcs->count; i++) {
+    INSTRUCTION *inst = (INSTRUCTION *)funcs->get(funcs, i);
+    MapPair *r = map_get(vm->root_context->symbols, pair->key);
+    if (r == NULL) {
+      printf("linker error, %s not found.", pair->key);
+      return;
+    }
+    inst->v->data.ptr = r->value;
   }
 }
 
-void VM_Init_impl() {
-  printf("GET_INSTRUCTION_STORE Seg count: %d\n",
-         GET_INSTRUCTION_STORE()->map->count);
-  map_foreach(GET_INSTRUCTION_STORE()->map, list_inst_store);
+void vm_link_stage(VM *vm) {
+  map_foreach(vm->ready_link, vm_link_progress, vm);
 }
 
-int VM_Run_impl() {}
+void VM_Init(VM *vm) {
+  printf("GET_INSTRUCTION_STORE Seg count: %d\n",
+         GET_INSTRUCTION_STORE()->map->count);
+  init_actions();
+  init_builtin(vm);
+  vm_compile_stage(vm);
+  vm_link_stage(vm);
+}
+
+
+int VM_Run(VM *vm) {
+  struct Vec *code = vm->entry->instructions;
+  for (int i = 0; i < code->count; i++) {
+    INSTRUCTION *inst = (INSTRUCTION *)code->get(code, i);
+    switch (inst->code) {
+    case I_PUSH:
+      break;
+    case I_STORE:
+      break;
+    case I_LOAD:
+      break;
+    case I_ADD:
+      break;
+    case I_MINUS:
+      break;
+    case I_MULTI:
+      break;
+    case I_DIV:
+      break;
+    case I_CALL:
+      break;
+    default:
+      assert(false);
+    }
+  }
+}
 
 VM *new_vm() {
   VM *vm = (VM *)malloc(sizeof(VM));
   vm->entry = NULL;
   vm->root_context = new_context();
   vm->cur_context = vm->root_context;
-  vm->Init = VM_Init_impl;
-  vm->Run = VM_Run_impl;
+  vm->ready_link = new_map();
   return vm;
+}
+
+INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_REF;
+  map_insert(vm->cur_context->refs, value, v);
+  v->data.ptr = value;
+  return new_inst(I_STORE, v);
+}
+
+INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_REF;
+  MapPair *pair = map_get(vm->cur_context->refs, value);
+  assert(pair != NULL);
+  v->data.ptr = value;
+  return new_inst(I_LOAD, v);
+}
+
+INSTRUCTION *NEW_PUSH_D_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_INT;
+  v->data.i_val = (int)strtod(value, NULL);
+  return new_inst(I_PUSH, v);
+}
+
+INSTRUCTION *NEW_PUSH_F_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_FLOAT;
+  v->data.f_val = strtod(value, NULL);
+  return new_inst(I_PUSH, v);
+}
+// do nothing now
+INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) { return NULL; }
+
+INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_STR_INDEX;
+  vm->cur_context->cvalues->push(vm->cur_context->cvalues, value);
+  v->data.i_val = vm->cur_context->cvalues->count - 1;
+  return new_inst(I_PUSH, v);
+}
+
+INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_FUNC;
+  INSTRUCTION *inst = new_inst(I_CALL, v);
+  MapPair *pair = map_get(vm->ready_link, value);
+  if (pair == NULL) {
+    struct Vec *store = new_vec();
+    store->push(store, inst);
+    map_insert(vm->ready_link, value, store);
+    return inst;
+  }
+  struct Vec *store = pair->value;
+  store->push(store, inst);
+  return inst;
+}
+INSTRUCTION *NEW_ADD_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_ADD, NULL);
+}
+INSTRUCTION *NEW_MINUS_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_MINUS, NULL);
+}
+INSTRUCTION *NEW_MULTI_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_MULTI, NULL);
+}
+INSTRUCTION *NEW_DIV_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_DIV, NULL);
 }
 
 #endif

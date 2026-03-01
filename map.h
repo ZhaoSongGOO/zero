@@ -21,8 +21,8 @@ void free_map(Map *map);
 void map_insert(Map *map, const char *key, void *value);
 MapPair *map_get(Map *map, const char *key);
 
-typedef void (*map_handler)(MapPair *pair);
+typedef void (*map_handler)(MapPair *pair, void *);
 
-void map_foreach(Map *map, map_handler handler);
+void map_foreach(Map *map, map_handler handler, void *);
 
 #endif

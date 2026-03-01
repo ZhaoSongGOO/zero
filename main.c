@@ -30,6 +30,6 @@ int main(int argc, char *argv[]) {
   program_visitor(program);
   instruction_to_file();
   VM *v = new_vm();
-  v->Init();
-  v->Run();
+  VM_Init(v);
+  VM_Run(v);
 }

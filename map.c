@@ -69,17 +69,17 @@ MapPair *map_get(Map *map, const char *key) {
   return start;
 }
 
-void _map_foreach_kernel(MapPair *pair, map_handler handler) {
+void _map_foreach_kernel(MapPair *pair, map_handler handler, void *data) {
   if (pair == NULL) {
     return;
   }
 
-  handler(pair);
+  handler(pair, data);
 
-  _map_foreach_kernel(pair->left, handler);
-  _map_foreach_kernel(pair->right, handler);
+  _map_foreach_kernel(pair->left, handler, data);
+  _map_foreach_kernel(pair->right, handler, data);
 }
 
-void map_foreach(Map *map, map_handler handler) {
-  _map_foreach_kernel(map->root, handler);
+void map_foreach(Map *map, map_handler handler, void *data) {
+  _map_foreach_kernel(map->root, handler, data);
 }

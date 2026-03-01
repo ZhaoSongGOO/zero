@@ -16,7 +16,7 @@ void vec_push_impl(struct Vec *vec, void *v) {
     return;
   }
   vec->capacity *= 2;
-  vec->values = realloc(vec->values, vec->capacity);
+  vec->values = realloc(vec->values, vec->capacity * sizeof(void *));
   vec->values[vec->count] = v;
   vec->count += 1;
 }
