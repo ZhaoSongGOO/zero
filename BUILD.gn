@@ -1,6 +1,8 @@
 executable("zero") {
   sources = [
     "//main.c",
+    "//map.c",
+    "//map.h",
     "//vec.c",
     "//vec.h",
     "//zero.h",
