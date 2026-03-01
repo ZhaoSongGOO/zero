@@ -1,15 +1,12 @@
 #define ZERO_IMPLEMENTATION
 #include "zero.h"
 
-int main() {
-  struct source *s = read_source("./code.z");
-  printf("%s\n", s->content);
-  struct scanner *sc = scanner_init(s);
-  while (sc->cur_token.type != TOKEN_EOF &&
-         sc->cur_token.type != TOKEN_UNKNOWN) {
-    token_print(sc->cur_token, sc);
-    scanner_run(sc);
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    printf("Source file not be supported, please use `zero source`");
+    return 0;
   }
-
-  free_scanner(sc);
+  struct Parser *parser = parser_init(argv[1]);
+  struct syntax_program *program = parser_program(parser);
+  program_visitor(program);
 }

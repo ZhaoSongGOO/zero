@@ -590,6 +590,17 @@ struct Parser {
   struct scanner *sc;
 };
 
+struct Parser *parser_init(const char *source_name) {
+  struct source *s = read_source(source_name);
+
+  if (s == NULL) {
+    printf("file `$s not found", source_name);
+  }
+  struct Parser *p = (struct Parser *)malloc(sizeof(struct Parser));
+  p->sc = scanner_init(s);
+  return p;
+}
+
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
@@ -632,6 +643,7 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
       parser->sc->symbol
           ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
           ->str;
+  expected_token_type_and_run(parser->sc, TOKEN_ID);
   expected_token_type_and_run(parser->sc, TOKEN_EQUAL);
   struct syntax_expr *expr = parser_expr(parser);
   struct syntax_statement *statement =
@@ -694,6 +706,16 @@ struct syntax_expr *parser_factory(struct Parser *parser) {
   return primary;
 }
 
+// just for debug
+void symbol_print(struct str_store *store) {
+  struct str_item *item = store->head;
+  int index = 1;
+  while (item != NULL) {
+    printf("[%d]: %s\n", index++, item->str);
+    item = item->next;
+  }
+}
+
 struct syntax_expr *parser_primary(struct Parser *parser) {
   switch (parser->sc->cur_token.type) {
   case TOKEN_NUM: {
@@ -729,7 +751,7 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
     id->type = EXPR_ID;
     id->data.identifier_expr.name =
-        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index);
+        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
     return id;
   }
   case TOKEN_LEFT_BRACKET: // [
@@ -743,7 +765,7 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     return expr;
   }
   default:
-    break;
+    return NULL;
   }
 }
 
@@ -787,7 +809,95 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
     pair->value = parser_expr(parser);
     expr->data.object_expr.pairs->push(expr->data.object_expr.pairs, pair);
   } while (parser->sc->cur_token.type == TOKEN_COMMA);
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
   return expr;
+}
+
+// parser visitor functions
+void statement_visitor(struct syntax_statement *statment);
+void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
+void statement_stmt_expr_visitor(struct syntax_statement *statement);
+void expression_visitor(struct syntax_expr *expr);
+void expression_literal_visitor(struct syntax_expr *expr);
+void expression_binary_visitor(struct syntax_expr *expr);
+void program_visitor(struct syntax_program *program);
+
+void program_visitor(struct syntax_program *program) {
+  for (int i = 0; i < program->statements->count; i++) {
+    statement_visitor(program->statements->get(program->statements, i));
+  }
+}
+
+void statement_visitor(struct syntax_statement *statment) {
+  switch (statment->type) {
+  case STMT_VAR_DECL:
+    return statement_stmt_var_decl_visitor(statment);
+  case STMT_EXPR:
+    return statement_stmt_expr_visitor(statment);
+  default:
+    assert(false);
+    break;
+  }
+}
+
+void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
+  assert(statement->type == STMT_VAR_DECL);
+  printf("var name is %s\n", statement->data.var_stmt.name);
+  expression_visitor(statement->data.var_stmt.initializer);
+}
+void statement_stmt_expr_visitor(struct syntax_statement *statement) {
+  assert(statement->type == STMT_EXPR);
+  expression_visitor(statement->data.expr_stmt.expr);
+}
+
+void expression_visitor(struct syntax_expr *expr) {
+  switch (expr->type) {
+  case EXPR_ID:
+    printf("expr id: %s\n", expr->data.identifier_expr.name);
+    break;
+  case EXPR_BINARY:
+    expression_binary_visitor(expr);
+    break;
+  case EXPR_LITERAL:
+    expression_literal_visitor(expr);
+    break;
+  case EXPR_CALL:
+    break;
+  case EXPR_ARRAY:
+    break;
+  case EXPR_OBJECT:
+    break;
+  default:
+    assert(false);
+  }
+}
+
+// LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL
+void expression_literal_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_LITERAL);
+  switch (expr->data.literal_expr.kind) {
+  case LIT_INT:
+    printf("literal -> int(%d)\n", expr->data.literal_expr.int_val);
+    break;
+  case LIT_FLOAT:
+    printf("literal -> float(%f)\n", expr->data.literal_expr.float_val);
+    break;
+  case LIT_STR:
+    printf("literal -> str(%s)\n", expr->data.literal_expr.str_val);
+    break;
+  case LIT_BOOL:
+    printf("literal -> bool(%d)\n", expr->data.literal_expr.bool_val);
+    break;
+  default:
+    assert(false);
+  }
+}
+
+void expression_binary_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_BINARY);
+  expression_visitor(expr->data.binary_expr.left);
+  printf("binary visitor: op(%d)\n", expr->data.binary_expr.op);
+  expression_visitor(expr->data.binary_expr.right);
 }
 
 #endif

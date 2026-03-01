@@ -1,4 +1,4 @@
-executable("main") {
+executable("zero") {
   sources = [
     "//main.c",
     "//vec.c",
