@@ -28,4 +28,8 @@ int main(int argc, char *argv[]) {
   INSTRUCTION_STORE.fd =
       open(target_filename(argv[1]), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   program_visitor(program);
+
+  VM *v = new_vm();
+  v->Init();
+  v->Run();
 }

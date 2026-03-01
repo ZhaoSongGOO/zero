@@ -858,18 +858,6 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
   return expr;
 }
 
-// code
-
-typedef enum {
-  I_PUSH,
-  I_MULTI,
-  I_DIV,
-  I_MINUS,
-  I_LOAD,
-  I_STORE,
-  I_CALL
-} INSTRUCTION;
-
 // parser visitor functions
 void statement_visitor(struct syntax_statement *statment);
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
@@ -977,16 +965,16 @@ void expression_literal_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_LITERAL);
   switch (expr->data.literal_expr.kind) {
   case LIT_INT:
-    instructuon_save("PUSH %d", expr->data.literal_expr.int_val);
+    instructuon_save("PUSH_D %d", expr->data.literal_expr.int_val);
     break;
   case LIT_FLOAT:
-    instructuon_save("PUSH %f", expr->data.literal_expr.float_val);
+    instructuon_save("PUSH_F %f", expr->data.literal_expr.float_val);
     break;
   case LIT_STR:
-    instructuon_save("PUSH %s", expr->data.literal_expr.str_val);
+    instructuon_save("PUSH_S \"%s\"", expr->data.literal_expr.str_val);
     break;
   case LIT_BOOL:
-    instructuon_save("PUSH %d", expr->data.literal_expr.bool_val);
+    instructuon_save("PUSH_B %d", expr->data.literal_expr.bool_val);
     break;
   default:
     assert(false);
@@ -1043,6 +1031,87 @@ void expression_object_visitor(struct syntax_expr *expr) {
   }
   instructuon_save("PUSH %d", pairs->count);
   instructuon_save("CALL NEW_OBJECT");
+}
+
+typedef enum {
+  VAL_INT,
+  VAL_FLOAT,
+  VAL_STR_INDEX,
+  VAL_OBJ_PTR,
+  VAL_ARR_PTR,
+  VAL_BOOL,
+  VAL_FUNC
+} ValueType;
+
+typedef struct {
+  ValueType type;
+  union {
+    int i_val;
+    float f_val;
+    bool b_val;
+    void *ptr;
+  } data;
+} ZValue;
+
+struct ZArray {
+  int length;
+  ZValue *elements;
+};
+
+typedef struct {
+  const char *key;
+  ZValue value;
+} ZPair;
+
+typedef struct {
+  int count;
+  ZPair *entries;
+} ZObject;
+
+typedef enum {
+  I_PUSH,
+  I_MULTI,
+  I_DIV,
+  I_MINUS,
+  I_LOAD,
+  I_STORE,
+  I_CALL
+} INSTRUCTION_CODE;
+
+typedef struct {
+  INSTRUCTION_CODE code;
+  ZValue v;
+} INSTRUCTION;
+
+typedef struct {
+  INSTRUCTION *instructions;
+} ZFunction;
+
+typedef struct {
+  ZFunction *entry;
+  // TODO(zhaosonggo): should use map
+  // struct Map * root_symbols;
+  // struct Map * cur_symbols;
+  void (*Init)();
+  int (*Run)();
+} VM;
+
+void VM_Init_impl() {
+  for (int i = 0; i < INSTRUCTION_STORE.store.count; i++) {
+    printf("DEBUG: %s\n",
+           INSTRUCTION_STORE.store.get(&INSTRUCTION_STORE.store, i)->str);
+  }
+}
+
+int VM_Run_impl() {}
+
+VM *new_vm() {
+  VM *vm = (VM *)malloc(sizeof(VM));
+  vm->entry = NULL;
+  // vm->symbols = new_vec();
+  vm->Init = VM_Init_impl;
+  vm->Run = VM_Run_impl;
+  return vm;
 }
 
 #endif
