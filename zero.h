@@ -491,8 +491,16 @@ void token_print(struct token t, struct scanner *sc) {
 #include <assert.h>
 
 void expected_token_type_and_run(struct scanner *sc, TOKEN_TYPE type) {
+  // printf("DEBUG: %d--%d\n", sc->cur_token.type, type);
   assert(sc->cur_token.type == type);
   scanner_run(sc);
+}
+
+void soft_expected_token_type_and_run(struct scanner *sc, TOKEN_TYPE type) {
+  // printf("DEBUG: soft %d--%d\n", sc->cur_token.type, type);
+  if (sc->cur_token.type == type) {
+    scanner_run(sc);
+  }
 }
 
 void expected_token_type_str_value_and_run(struct scanner *sc, TOKEN_TYPE type,
@@ -729,7 +737,7 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
       number->data.literal_expr.int_val = n.value.number_value.int_value;
     } else if (n.value.number_value.type == NUMBER_FLOAT) {
       number->data.literal_expr.kind = LIT_FLOAT;
-      number->data.literal_expr.int_val = n.value.number_value.float_value;
+      number->data.literal_expr.float_val = n.value.number_value.float_value;
     }
     return number;
   }
@@ -741,7 +749,7 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     str->type = EXPR_LITERAL;
     str->data.literal_expr.kind = LIT_STR;
     str->data.literal_expr.str_val =
-        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index);
+        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
     return str;
   }
   case TOKEN_ID: {
@@ -770,7 +778,21 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
 }
 
 struct syntax_expr *parser_call(struct syntax_expr *caller,
-                                struct Parser *parser) {}
+                                struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_PARENT);
+  struct Vec *args = new_vec();
+  while (parser->sc->cur_token.type != TOKEN_RIGHT_PARENT) {
+    args->push(args, parser_expr(parser));
+    soft_expected_token_type_and_run(parser->sc, TOKEN_COMMA);
+  }
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_PARENT);
+  struct syntax_expr *call =
+      (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+  call->type = EXPR_CALL;
+  call->data.call_expr.func_name = caller->data.identifier_expr.name;
+  call->data.call_expr.args = args;
+  return call;
+}
 
 struct syntax_expr *parser_arraylist(struct Parser *parser) {
   expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACKET);
@@ -803,7 +825,8 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
     struct syntax_kv_pair *pair =
         (struct syntax_kv_pair *)malloc(sizeof(struct syntax_kv_pair));
     pair->key =
-        parser->sc->symbol->get(parser->sc->symbol, key.value.symbol_index);
+        parser->sc->symbol->get(parser->sc->symbol, key.value.symbol_index)
+            ->str;
     expected_token_type_and_run(parser->sc, TOKEN_STRING);
     expected_token_type_and_run(parser->sc, TOKEN_COLON);
     pair->value = parser_expr(parser);
@@ -820,6 +843,9 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement);
 void expression_visitor(struct syntax_expr *expr);
 void expression_literal_visitor(struct syntax_expr *expr);
 void expression_binary_visitor(struct syntax_expr *expr);
+void expression_array_visitor(struct syntax_expr *expr);
+void expression_object_visitor(struct syntax_expr *expr);
+void expression_call_visitor(struct syntax_expr *expr);
 void program_visitor(struct syntax_program *program);
 
 void program_visitor(struct syntax_program *program) {
@@ -862,10 +888,13 @@ void expression_visitor(struct syntax_expr *expr) {
     expression_literal_visitor(expr);
     break;
   case EXPR_CALL:
+    expression_call_visitor(expr);
     break;
   case EXPR_ARRAY:
+    expression_array_visitor(expr);
     break;
   case EXPR_OBJECT:
+    expression_object_visitor(expr);
     break;
   default:
     assert(false);
@@ -898,6 +927,32 @@ void expression_binary_visitor(struct syntax_expr *expr) {
   expression_visitor(expr->data.binary_expr.left);
   printf("binary visitor: op(%d)\n", expr->data.binary_expr.op);
   expression_visitor(expr->data.binary_expr.right);
+}
+
+void expression_call_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_CALL);
+  printf("call visitor: function(%s)\n", expr->data.call_expr.func_name);
+  for (int i = 0; i < expr->data.call_expr.args->count; i++) {
+    expression_visitor(
+        expr->data.call_expr.args->get(expr->data.call_expr.args, i));
+  }
+}
+
+void expression_array_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_ARRAY);
+  struct Vec *elements = expr->data.array_expr.elements;
+  for (int i = 0; i < elements->count; i++) {
+    expression_visitor(elements->get(elements, i));
+  }
+}
+void expression_object_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_OBJECT);
+  struct Vec *pairs = expr->data.object_expr.pairs;
+  for (int i = 0; i < pairs->count; i++) {
+    struct syntax_kv_pair *kv = pairs->get(pairs, i);
+    printf("object visitor: key(%s)\n", kv->key);
+    expression_visitor(kv->value);
+  }
 }
 
 #endif
