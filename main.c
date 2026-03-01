@@ -25,10 +25,10 @@ int main(int argc, char *argv[]) {
   }
   struct Parser *parser = parser_init(argv[1]);
   struct syntax_program *program = parser_program(parser);
-  INSTRUCTION_STORE.fd =
+  GET_INSTRUCTION_STORE()->fd =
       open(target_filename(argv[1]), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   program_visitor(program);
-
+  instruction_to_file();
   VM *v = new_vm();
   v->Init();
   v->Run();

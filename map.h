@@ -12,12 +12,17 @@ struct map_pair {
 
 typedef struct {
   MapPair *root;
+  int count;
 } Map;
 
 Map *new_map();
 void free_map(Map *map);
 
-void insert(Map *map, const char *key, void *value);
-MapPair *get(Map *map, const char *key);
+void map_insert(Map *map, const char *key, void *value);
+MapPair *map_get(Map *map, const char *key);
+
+typedef void (*map_handler)(MapPair *pair);
+
+void map_foreach(Map *map, map_handler handler);
 
 #endif

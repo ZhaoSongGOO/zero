@@ -891,19 +891,23 @@ void statement_visitor(struct syntax_statement *statment) {
 
 struct instruction_store {
   int fd;
-  struct str_store store;
+  Map *map;
 };
 
-struct instruction_store INSTRUCTION_STORE = (struct instruction_store){
-    .store = (struct str_store){.count = 0,
-                                .head = NULL,
-                                .tail = NULL,
-                                .get = str_store_get_impl,
-                                .insert = str_store_insert_impl,
-                                .insert_raw = str_store_insert_raw_impl},
-    .fd = -1};
+struct instruction_store *__instruction_store = NULL;
 
-void instructuon_save(const char *fmt, ...) {
+struct instruction_store *GET_INSTRUCTION_STORE() {
+  if (__instruction_store == NULL) {
+    __instruction_store =
+        (struct instruction_store *)malloc(sizeof(struct instruction_store));
+    __instruction_store->fd = -1;
+    __instruction_store->map = new_map();
+  }
+  return __instruction_store;
+}
+
+void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
+  struct instruction_store *gs = GET_INSTRUCTION_STORE();
   va_list args;
   va_start(args, fmt);
   int len = vsnprintf(NULL, 0, fmt, args);
@@ -915,21 +919,48 @@ void instructuon_save(const char *fmt, ...) {
   va_start(args, fmt);
   vsnprintf(buf, len + 1, fmt, args);
   va_end(args);
-  INSTRUCTION_STORE.store.insert_raw(&INSTRUCTION_STORE.store, buf);
-  if (INSTRUCTION_STORE.fd != -1) {
-    if (len > 0) {
-      write(INSTRUCTION_STORE.fd, buf, len);
-      write(INSTRUCTION_STORE.fd, "\n", 1);
-    }
+  // if (gs->fd != -1) {
+  //   if (len > 0) {
+  //     write(gs->fd, buf, len);
+  //     write(gs->fd, "\n", 1);
+  //   }
+  // }
+  struct map_pair *pair = map_get(gs->map, seg);
+  if (pair == NULL) {
+    struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
+    s->count = 0;
+    s->head = NULL;
+    s->tail = NULL;
+    s->get = str_store_get_impl;
+    s->insert = str_store_insert_impl;
+    s->insert_raw = str_store_insert_raw_impl;
+    s->insert_raw(s, buf);
+    map_insert(gs->map, seg, s);
+    return;
+  }
+  struct str_store *s = (struct str_store *)pair->value;
+  s->insert_raw(s, buf);
+}
+
+void itf(MapPair *pair) {
+  int fd = GET_INSTRUCTION_STORE()->fd;
+  write(fd, pair->key, strlen(pair->key));
+  write(fd, ":\n", 2);
+  struct str_store *store = (struct str_store *)pair->value;
+  for (int i = 0; i < store->count; i++) {
+    const char *inst = store->get(store, i)->str;
+    write(fd, " ", 1);
+    write(fd, inst, strlen(inst));
+    write(fd, "\n", 1);
   }
 }
 
-void instruction_to_file() {}
+void instruction_to_file() { map_foreach(GET_INSTRUCTION_STORE()->map, itf); }
 
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_VAR_DECL);
   expression_visitor(statement->data.var_stmt.initializer);
-  instructuon_save("STORE %s", statement->data.var_stmt.name);
+  INSTRUCTION_SAVE("main", "STORE %s", statement->data.var_stmt.name);
 }
 void statement_stmt_expr_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_EXPR);
@@ -939,7 +970,7 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
   case EXPR_ID:
-    instructuon_save("LOAD %s", expr->data.identifier_expr.name);
+    INSTRUCTION_SAVE("main", "LOAD %s", expr->data.identifier_expr.name);
     break;
   case EXPR_BINARY:
     expression_binary_visitor(expr);
@@ -966,16 +997,16 @@ void expression_literal_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_LITERAL);
   switch (expr->data.literal_expr.kind) {
   case LIT_INT:
-    instructuon_save("PUSH_D %d", expr->data.literal_expr.int_val);
+    INSTRUCTION_SAVE("main", "PUSH_D %d", expr->data.literal_expr.int_val);
     break;
   case LIT_FLOAT:
-    instructuon_save("PUSH_F %f", expr->data.literal_expr.float_val);
+    INSTRUCTION_SAVE("main", "PUSH_F %f", expr->data.literal_expr.float_val);
     break;
   case LIT_STR:
-    instructuon_save("PUSH_S \"%s\"", expr->data.literal_expr.str_val);
+    INSTRUCTION_SAVE("main", "PUSH_S \"%s\"", expr->data.literal_expr.str_val);
     break;
   case LIT_BOOL:
-    instructuon_save("PUSH_B %d", expr->data.literal_expr.bool_val);
+    INSTRUCTION_SAVE("main", "PUSH_B %d", expr->data.literal_expr.bool_val);
     break;
   default:
     assert(false);
@@ -988,16 +1019,16 @@ void expression_binary_visitor(struct syntax_expr *expr) {
   expression_visitor(expr->data.binary_expr.right);
   switch (expr->data.binary_expr.op) {
   case TOKEN_ADD:
-    instructuon_save("ADD");
+    INSTRUCTION_SAVE("main", "ADD");
     break;
   case TOKEN_MINUS:
-    instructuon_save("MINUS");
+    INSTRUCTION_SAVE("main", "MINUS");
     break;
   case TOKEN_MULTI:
-    instructuon_save("MULTI");
+    INSTRUCTION_SAVE("main", "MULTI");
     break;
   case TOKEN_DIV:
-    instructuon_save("DIV");
+    INSTRUCTION_SAVE("main", "DIV");
     break;
   default:
     assert(false);
@@ -1010,7 +1041,7 @@ void expression_call_visitor(struct syntax_expr *expr) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
   }
-  instructuon_save("CALL %s", expr->data.call_expr.func_name);
+  INSTRUCTION_SAVE("main", "CALL %s", expr->data.call_expr.func_name);
 }
 
 void expression_array_visitor(struct syntax_expr *expr) {
@@ -1019,19 +1050,19 @@ void expression_array_visitor(struct syntax_expr *expr) {
   for (int i = 0; i < elements->count; i++) {
     expression_visitor(elements->get(elements, i));
   }
-  instructuon_save("PUSH_D %d", elements->count);
-  instructuon_save("CALL NEW_ARRAY");
+  INSTRUCTION_SAVE("main", "PUSH_D %d", elements->count);
+  INSTRUCTION_SAVE("main", "CALL NEW_ARRAY");
 }
 void expression_object_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_OBJECT);
   struct Vec *pairs = expr->data.object_expr.pairs;
   for (int i = 0; i < pairs->count; i++) {
     struct syntax_kv_pair *kv = pairs->get(pairs, i);
-    instructuon_save("PUSH_S %s", kv->key);
+    INSTRUCTION_SAVE("main", "PUSH_S %s", kv->key);
     expression_visitor(kv->value);
   }
-  instructuon_save("PUSH_D %d", pairs->count);
-  instructuon_save("CALL NEW_OBJECT");
+  INSTRUCTION_SAVE("main", "PUSH_D %d", pairs->count);
+  INSTRUCTION_SAVE("main", "CALL NEW_OBJECT");
 }
 
 typedef enum {
@@ -1111,11 +1142,17 @@ typedef struct {
   int (*Run)();
 } VM;
 
-void VM_Init_impl() {
-  for (int i = 0; i < INSTRUCTION_STORE.store.count; i++) {
-    printf("DEBUG: %s\n",
-           INSTRUCTION_STORE.store.get(&INSTRUCTION_STORE.store, i)->str);
+void list_inst_store(MapPair *pair) {
+  struct str_store *store = (struct str_store *)pair->value;
+  for (int i = 0; i < store->count; i++) {
+    printf("DEBUG: %s\n", store->get(store, i)->str);
   }
+}
+
+void VM_Init_impl() {
+  printf("GET_INSTRUCTION_STORE Seg count: %d\n",
+         GET_INSTRUCTION_STORE()->map->count);
+  map_foreach(GET_INSTRUCTION_STORE()->map, list_inst_store);
 }
 
 int VM_Run_impl() {}

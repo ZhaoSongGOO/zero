@@ -6,6 +6,7 @@
 Map *new_map() {
   Map *m = (Map *)malloc(sizeof(Map));
   m->root = NULL;
+  m->count = 0;
   return m;
 }
 
@@ -21,7 +22,8 @@ MapPair *new_map_pair(const char *key, void *value) {
 // TODO:free memory, do nothing now.
 void free_map(Map *map) {}
 
-void insert(Map *map, const char *key, void *value) {
+void map_insert(Map *map, const char *key, void *value) {
+  map->count += 1;
   if (map->root == NULL) {
     map->root = new_map_pair(key, value);
     return;
@@ -51,7 +53,7 @@ void insert(Map *map, const char *key, void *value) {
     }
   }
 }
-MapPair *get(Map *map, const char *key) {
+MapPair *map_get(Map *map, const char *key) {
   MapPair *start = map->root;
 
   while (start != NULL) {
@@ -65,4 +67,19 @@ MapPair *get(Map *map, const char *key) {
     }
   }
   return start;
+}
+
+void _map_foreach_kernel(MapPair *pair, map_handler handler) {
+  if (pair == NULL) {
+    return;
+  }
+
+  handler(pair);
+
+  _map_foreach_kernel(pair->left, handler);
+  _map_foreach_kernel(pair->right, handler);
+}
+
+void map_foreach(Map *map, map_handler handler) {
+  _map_foreach_kernel(map->root, handler);
 }
