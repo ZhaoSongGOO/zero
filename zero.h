@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,6 +72,7 @@ struct str_store {
   struct str_item *(*get)(struct str_store *self, unsigned int index);
   unsigned int (*insert)(struct str_store *self, const char *src,
                          unsigned int size);
+  unsigned int (*insert_raw)(struct str_store *self, const char *src);
 };
 
 struct source {
@@ -97,6 +99,8 @@ void free_source(struct source *source_file);
 void free_scanner(struct scanner *scanner);
 
 struct str_item *str_store_get_impl(struct str_store *self, unsigned int index);
+
+unsigned int str_store_insert_raw_impl(struct str_store *self, const char *src);
 
 unsigned int str_store_insert_impl(struct str_store *self, const char *src,
                                    unsigned int size);
@@ -363,6 +367,24 @@ struct str_item *str_store_get_impl(struct str_store *self,
     start += 1;
   }
   return p;
+}
+
+unsigned int str_store_insert_raw_impl(struct str_store *self,
+                                       const char *src) {
+  struct str_item *p = (struct str_item *)malloc(sizeof(struct str_item));
+  p->next = NULL;
+  p->prev = NULL;
+  p->str = src;
+  if (self->tail == NULL) {
+    self->head = p;
+    self->tail = p;
+  } else {
+    self->tail->next = p;
+    p->prev = self->tail;
+    self->tail = p;
+  }
+  self->count += 1;
+  return self->count - 1;
 }
 
 unsigned int str_store_insert_impl(struct str_store *self, const char *src,
@@ -836,6 +858,18 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
   return expr;
 }
 
+// code
+
+typedef enum {
+  I_PUSH,
+  I_MULTI,
+  I_DIV,
+  I_MINUS,
+  I_LOAD,
+  I_STORE,
+  I_CALL
+} INSTRUCTION;
+
 // parser visitor functions
 void statement_visitor(struct syntax_statement *statment);
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
@@ -866,10 +900,47 @@ void statement_visitor(struct syntax_statement *statment) {
   }
 }
 
+struct instruction_store {
+  int fd;
+  struct str_store store;
+};
+
+struct instruction_store INSTRUCTION_STORE = (struct instruction_store){
+    .store = (struct str_store){.count = 0,
+                                .head = NULL,
+                                .tail = NULL,
+                                .get = str_store_get_impl,
+                                .insert = str_store_insert_impl,
+                                .insert_raw = str_store_insert_raw_impl},
+    .fd = -1};
+
+void instructuon_save(const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  int len = vsnprintf(NULL, 0, fmt, args);
+  va_end(args);
+
+  if (len < 0)
+    return;
+  char *buf = malloc(len + 1);
+  va_start(args, fmt);
+  vsnprintf(buf, len + 1, fmt, args);
+  va_end(args);
+  INSTRUCTION_STORE.store.insert_raw(&INSTRUCTION_STORE.store, buf);
+  if (INSTRUCTION_STORE.fd != -1) {
+    if (len > 0) {
+      write(INSTRUCTION_STORE.fd, buf, len);
+      write(INSTRUCTION_STORE.fd, "\n", 1);
+    }
+  }
+}
+
+void instruction_to_file() {}
+
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_VAR_DECL);
-  printf("var name is %s\n", statement->data.var_stmt.name);
   expression_visitor(statement->data.var_stmt.initializer);
+  instructuon_save("STORE %s", statement->data.var_stmt.name);
 }
 void statement_stmt_expr_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_EXPR);
@@ -879,7 +950,7 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
   case EXPR_ID:
-    printf("expr id: %s\n", expr->data.identifier_expr.name);
+    instructuon_save("LOAD %s", expr->data.identifier_expr.name);
     break;
   case EXPR_BINARY:
     expression_binary_visitor(expr);
@@ -906,16 +977,16 @@ void expression_literal_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_LITERAL);
   switch (expr->data.literal_expr.kind) {
   case LIT_INT:
-    printf("literal -> int(%d)\n", expr->data.literal_expr.int_val);
+    instructuon_save("PUSH %d", expr->data.literal_expr.int_val);
     break;
   case LIT_FLOAT:
-    printf("literal -> float(%f)\n", expr->data.literal_expr.float_val);
+    instructuon_save("PUSH %f", expr->data.literal_expr.float_val);
     break;
   case LIT_STR:
-    printf("literal -> str(%s)\n", expr->data.literal_expr.str_val);
+    instructuon_save("PUSH %s", expr->data.literal_expr.str_val);
     break;
   case LIT_BOOL:
-    printf("literal -> bool(%d)\n", expr->data.literal_expr.bool_val);
+    instructuon_save("PUSH %d", expr->data.literal_expr.bool_val);
     break;
   default:
     assert(false);
@@ -925,17 +996,32 @@ void expression_literal_visitor(struct syntax_expr *expr) {
 void expression_binary_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_BINARY);
   expression_visitor(expr->data.binary_expr.left);
-  printf("binary visitor: op(%d)\n", expr->data.binary_expr.op);
   expression_visitor(expr->data.binary_expr.right);
+  switch (expr->data.binary_expr.op) {
+  case TOKEN_ADD:
+    instructuon_save("ADD");
+    break;
+  case TOKEN_MINUS:
+    instructuon_save("MINUS");
+    break;
+  case TOKEN_MULTI:
+    instructuon_save("MULTI");
+    break;
+  case TOKEN_DIV:
+    instructuon_save("DIV");
+    break;
+  default:
+    assert(false);
+  }
 }
 
 void expression_call_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_CALL);
-  printf("call visitor: function(%s)\n", expr->data.call_expr.func_name);
   for (int i = 0; i < expr->data.call_expr.args->count; i++) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
   }
+  instructuon_save("CALL %s", expr->data.call_expr.func_name);
 }
 
 void expression_array_visitor(struct syntax_expr *expr) {
@@ -944,15 +1030,19 @@ void expression_array_visitor(struct syntax_expr *expr) {
   for (int i = 0; i < elements->count; i++) {
     expression_visitor(elements->get(elements, i));
   }
+  instructuon_save("PUSH %d", elements->count);
+  instructuon_save("CALL NEW_ARRAY");
 }
 void expression_object_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_OBJECT);
   struct Vec *pairs = expr->data.object_expr.pairs;
   for (int i = 0; i < pairs->count; i++) {
     struct syntax_kv_pair *kv = pairs->get(pairs, i);
-    printf("object visitor: key(%s)\n", kv->key);
+    instructuon_save("PUSH %s", kv->key);
     expression_visitor(kv->value);
   }
+  instructuon_save("PUSH %d", pairs->count);
+  instructuon_save("CALL NEW_OBJECT");
 }
 
 #endif
