@@ -1119,6 +1119,9 @@ struct zero_context {
   struct Vec *cvalues;
   Map *refs;
   struct zero_context *parent;
+  unsigned int pc; // current pc
+  unsigned int sp; // stack top
+  unsigned int bp; // stack bottom
 };
 
 #define Context struct zero_context
@@ -1280,7 +1283,6 @@ void VM_Init(VM *vm) {
   vm_compile_stage(vm);
   vm_link_stage(vm);
 }
-
 
 int VM_Run(VM *vm) {
   struct Vec *code = vm->entry->instructions;
