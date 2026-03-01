@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "map.h"
 #include "vec.h"
 
 typedef enum {
@@ -1018,7 +1019,7 @@ void expression_array_visitor(struct syntax_expr *expr) {
   for (int i = 0; i < elements->count; i++) {
     expression_visitor(elements->get(elements, i));
   }
-  instructuon_save("PUSH %d", elements->count);
+  instructuon_save("PUSH_D %d", elements->count);
   instructuon_save("CALL NEW_ARRAY");
 }
 void expression_object_visitor(struct syntax_expr *expr) {
@@ -1026,10 +1027,10 @@ void expression_object_visitor(struct syntax_expr *expr) {
   struct Vec *pairs = expr->data.object_expr.pairs;
   for (int i = 0; i < pairs->count; i++) {
     struct syntax_kv_pair *kv = pairs->get(pairs, i);
-    instructuon_save("PUSH %s", kv->key);
+    instructuon_save("PUSH_S %s", kv->key);
     expression_visitor(kv->value);
   }
-  instructuon_save("PUSH %d", pairs->count);
+  instructuon_save("PUSH_D %d", pairs->count);
   instructuon_save("CALL NEW_OBJECT");
 }
 
@@ -1078,6 +1079,13 @@ typedef enum {
   I_CALL
 } INSTRUCTION_CODE;
 
+struct zero_context {
+  Map *symbols; // string -> ZValue
+  struct zero_context *parent;
+};
+
+#define Context struct zero_context
+
 typedef struct {
   INSTRUCTION_CODE code;
   ZValue v;
@@ -1085,13 +1093,20 @@ typedef struct {
 
 typedef struct {
   INSTRUCTION *instructions;
+  Context *ctx;
 } ZFunction;
+
+Context *new_context() {
+  Context *ctx = (Context *)malloc(sizeof(Context));
+  ctx->symbols = new_map();
+  ctx->parent = NULL;
+  return ctx;
+}
 
 typedef struct {
   ZFunction *entry;
-  // TODO(zhaosonggo): should use map
-  // struct Map * root_symbols;
-  // struct Map * cur_symbols;
+  Context *root_context;
+  Context *cur_context;
   void (*Init)();
   int (*Run)();
 } VM;
@@ -1108,7 +1123,8 @@ int VM_Run_impl() {}
 VM *new_vm() {
   VM *vm = (VM *)malloc(sizeof(VM));
   vm->entry = NULL;
-  // vm->symbols = new_vec();
+  vm->root_context = new_context();
+  vm->cur_context = vm->root_context;
   vm->Init = VM_Init_impl;
   vm->Run = VM_Run_impl;
   return vm;
