@@ -1120,8 +1120,6 @@ struct zero_context {
   Map *refs;
   struct zero_context *parent;
   unsigned int pc; // current pc
-  unsigned int sp; // stack top
-  unsigned int bp; // stack bottom
 };
 
 #define Context struct zero_context
@@ -1155,11 +1153,10 @@ Context *new_context() {
   return ctx;
 }
 
-ZFunction *new_function(Context *ctx) {
+ZFunction *new_function() {
   ZFunction *func = (ZFunction *)malloc(sizeof(ZFunction));
   func->ctx = new_context();
   func->instructions = new_vec();
-  func->ctx->parent = ctx;
   func->is_builtin = false;
   func->name = NULL;
   return func;
@@ -1170,6 +1167,9 @@ struct zero_vm {
   Context *root_context;
   Context *cur_context;
   Map *ready_link;
+  unsigned int sp; // stack top
+  unsigned int bp; // stack bottom
+  void *stacks[256];
 };
 #define VM struct zero_vm
 
@@ -1204,20 +1204,23 @@ void init_actions() {
   map_insert(actions, "DIV", NEW_DIV_INSTRUCTION);
 }
 
-ZValue *get_builtin_function_value(VM *vm) {
+ZValue *get_builtin_function_value(VM *vm, const char *name) {
   ZValue *b_print = (ZValue *)malloc(sizeof(ZValue));
   b_print->type = VAL_FUNC;
-  ZFunction *func = new_function(vm->cur_context);
+  ZFunction *func = new_function();
   func->is_builtin = true;
+  func->name = name;
+  b_print->data.ptr = func;
+  return b_print;
 }
 
 void init_builtin(VM *vm) {
   map_insert(vm->root_context->symbols, "print",
-             get_builtin_function_value(vm));
+             get_builtin_function_value(vm, "print"));
   map_insert(vm->root_context->symbols, "NEW_ARRAY",
-             get_builtin_function_value(vm));
+             get_builtin_function_value(vm, "NEW_ARRAY"));
   map_insert(vm->root_context->symbols, "NEW_OBJECT",
-             get_builtin_function_value(vm));
+             get_builtin_function_value(vm, "NEW_OBJECT"));
 }
 
 const Map *GET_ACTIONS() {
@@ -1229,10 +1232,8 @@ const Map *GET_ACTIONS() {
 
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
-  ZFunction *f = new_function(vm->cur_context);
-  if (strcmp(pair->key, "main") == 0) {
-    vm->entry = f;
-  }
+  ZFunction *f = new_function();
+  f->ctx->parent = vm->cur_context;
   vm->cur_context = f->ctx;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
@@ -1249,6 +1250,9 @@ void list_inst_store(MapPair *pair, void *data) {
   ZValue *value = (ZValue *)malloc(sizeof(ZValue));
   value->type = VAL_FUNC;
   value->data.ptr = f;
+  if (strcmp(pair->key, "main") == 0) {
+    vm->entry = value;
+  }
   map_insert(vm->root_context->symbols, pair->key, value);
   vm->cur_context = f->ctx->parent;
 }
@@ -1260,14 +1264,16 @@ void vm_compile_stage(VM *vm) {
 void vm_link_progress(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   struct Vec *funcs = (struct Vec *)pair->value;
+  MapPair *r = map_get(vm->root_context->symbols, pair->key);
+  if (r == NULL) {
+    printf("linker error, %s not found.", pair->key);
+    return;
+  }
   for (int i = 0; i < funcs->count; i++) {
     INSTRUCTION *inst = (INSTRUCTION *)funcs->get(funcs, i);
-    MapPair *r = map_get(vm->root_context->symbols, pair->key);
-    if (r == NULL) {
-      printf("linker error, %s not found.", pair->key);
-      return;
-    }
-    inst->v->data.ptr = r->value;
+    ZValue *zv = (ZValue *)r->value;
+    assert(zv->type == VAL_FUNC);
+    inst->v->data.ptr = zv->data.ptr;
   }
 }
 
@@ -1276,40 +1282,182 @@ void vm_link_stage(VM *vm) {
 }
 
 void VM_Init(VM *vm) {
-  printf("GET_INSTRUCTION_STORE Seg count: %d\n",
-         GET_INSTRUCTION_STORE()->map->count);
   init_actions();
   init_builtin(vm);
   vm_compile_stage(vm);
   vm_link_stage(vm);
 }
 
-int VM_Run(VM *vm) {
-  struct Vec *code = vm->entry->instructions;
-  for (int i = 0; i < code->count; i++) {
-    INSTRUCTION *inst = (INSTRUCTION *)code->get(code, i);
+void PUSH_INST_RUN(VM *vm, ZValue *value) { vm->stacks[++vm->sp] = value; }
+
+void STORE_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *v = vm->stacks[vm->sp--];
+  printf("STORE---> %ld\n", v);
+  value->data.ptr = v;
+}
+
+void LOAD_INST_RUN(VM *vm, ZValue *value) {
+  printf("LOAD---> %ld\n", value);
+  vm->stacks[++vm->sp] = value;
+}
+
+ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
+  if (left->type == VAL_REF) {
+    left = (ZValue *)(left->data.ptr);
+  }
+  if (right->type == VAL_REF) {
+    right = (ZValue *)(right->data.ptr);
+  }
+  assert(left->type == VAL_INT || left->type == VAL_FLOAT);
+  assert(right->type == VAL_INT || right->type == VAL_FLOAT);
+  ZValue *result = (ZValue *)malloc(sizeof(ZValue));
+  bool is_int = false;
+  if (left->type == VAL_INT || right->type == VAL_INT) {
+    is_int = true;
+  }
+
+  float l = 0;
+  float r = 0;
+  if (left->type == VAL_INT) {
+    l = left->data.i_val;
+  } else {
+    l = left->data.f_val;
+  }
+
+  if (right->type == VAL_INT) {
+    r = right->data.i_val;
+  } else {
+    r = right->data.f_val;
+  }
+  float s = 0;
+  switch (type) {
+  case TOKEN_ADD:
+    s = l + r;
+    break;
+  case TOKEN_MINUS:
+    s = l - r;
+    break;
+  case TOKEN_MULTI:
+    s = l * r;
+    break;
+  case TOKEN_DIV:
+    s = l / r;
+    break;
+  default:
+    break;
+  }
+  if (is_int) {
+    result->type = VAL_INT;
+    result->data.i_val = (int)s;
+  } else {
+    result->type = VAL_FLOAT;
+    result->data.f_val = s;
+  }
+  return result;
+}
+
+void ADD_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *result =
+      inst_run_op(TOKEN_ADD, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+  vm->stacks[--(vm->sp)] = result;
+}
+
+void MINUS_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *result =
+      inst_run_op(TOKEN_MINUS, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+  vm->stacks[--(vm->sp)] = result;
+}
+
+void MULTI_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *result =
+      inst_run_op(TOKEN_MULTI, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+  vm->stacks[--(vm->sp)] = result;
+}
+
+void DIV_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *result =
+      inst_run_op(TOKEN_DIV, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+  vm->stacks[--(vm->sp)] = result;
+}
+
+void print(VM *vm) {
+  ZValue *v = vm->stacks[vm->sp--];
+  switch (v->type) {
+  case VAL_INT:
+    printf("%d", v->data.i_val);
+    break;
+  case VAL_FLOAT:
+    printf("%ld", v->data.f_val);
+    break;
+  case VAL_STR_INDEX: {
+    printf("%s\n", vm->root_context->cvalues->get(vm->root_context->cvalues,
+                                                  v->data.i_val));
+  } break;
+  case VAL_REF:
+    break;
+  default:
+    break;
+  }
+}
+
+void call_builtin_function(VM *vm, ZFunction *func) {
+  assert(func->is_builtin);
+  if (strcmp(func->name, "print") == 0) {
+    print(vm);
+  } else {
+    printf("Call builtin function(%s)\n", func->name);
+  }
+}
+
+void CALL_INST_RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_FUNC);
+  ZFunction *func = (ZFunction *)(value->data.ptr);
+  if (func->is_builtin) {
+    call_builtin_function(vm, func);
+    return;
+  }
+  func->ctx->pc = 0;
+  // func->ctx->parent = vm->cur_context;
+  vm->cur_context = func->ctx;
+  struct Vec *code = func->instructions;
+  for (; func->ctx->pc < code->count; func->ctx->pc++) {
+    INSTRUCTION *inst = (INSTRUCTION *)code->get(code, func->ctx->pc);
     switch (inst->code) {
     case I_PUSH:
+      PUSH_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_STORE:
+      STORE_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_LOAD:
+      LOAD_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_ADD:
+      ADD_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_MINUS:
+      MINUS_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_MULTI:
+      MULTI_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_DIV:
+      DIV_INST_RUN(vm, (ZValue *)inst->v);
       break;
-    case I_CALL:
-      break;
+    case I_CALL: {
+      vm->cur_context = func->ctx->parent;
+      CALL_INST_RUN(vm, (ZValue *)inst->v);
+      vm->cur_context = func->ctx;
+    } break;
     default:
       assert(false);
     }
   }
+
+  vm->cur_context = func->ctx->parent;
 }
+
+int VM_Run(VM *vm) { CALL_INST_RUN(vm, vm->entry); }
 
 VM *new_vm() {
   VM *vm = (VM *)malloc(sizeof(VM));
@@ -1317,6 +1465,7 @@ VM *new_vm() {
   vm->root_context = new_context();
   vm->cur_context = vm->root_context;
   vm->ready_link = new_map();
+  vm->sp = -1;
   return vm;
 }
 
@@ -1329,12 +1478,9 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
 }
 
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_REF;
   MapPair *pair = map_get(vm->cur_context->refs, value);
   assert(pair != NULL);
-  v->data.ptr = value;
-  return new_inst(I_LOAD, v);
+  return new_inst(I_LOAD, pair->value);
 }
 
 INSTRUCTION *NEW_PUSH_D_INSTRUCTION(VM *vm, const char *value) {
@@ -1356,8 +1502,8 @@ INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) { return NULL; }
 INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
   ZValue *v = (ZValue *)malloc(sizeof(ZValue));
   v->type = VAL_STR_INDEX;
-  vm->cur_context->cvalues->push(vm->cur_context->cvalues, value);
-  v->data.i_val = vm->cur_context->cvalues->count - 1;
+  vm->root_context->cvalues->push(vm->root_context->cvalues, value);
+  v->data.i_val = vm->root_context->cvalues->count - 1;
   return new_inst(I_PUSH, v);
 }
 
