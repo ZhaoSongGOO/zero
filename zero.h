@@ -1082,11 +1082,12 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     id->data.identifier_expr.name =
         parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
     MapPair *variable_define_form_var = get_variables_from_parser_scope(
-        parser->cur_scope->parent, id->data.identifier_expr.name);
+        parser->cur_scope, id->data.identifier_expr.name);
     MapPair *variable_define_from_params =
         map_get(parser->cur_scope->params, id->data.identifier_expr.name);
     if (variable_define_from_params == NULL &&
-        variable_define_form_var == NULL) {
+        variable_define_form_var == NULL &&
+        parser->sc->cur_token.type != TOKEN_LEFT_PARENT) {
       printf("Variable(%s) not defined\n", id->data.identifier_expr.name);
       assert(false);
     }
