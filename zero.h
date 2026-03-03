@@ -39,16 +39,14 @@ typedef enum {
   TOKEN_EOF
 } TOKEN_TYPE;
 
-typedef enum {
-  NUMBER_INT,
-  NUMBER_FLOAT,
-} NUMBER_Type;
+typedef enum { NUMBER_INT, NUMBER_FLOAT, NUMBER_BOOL } NUMBER_Type;
 
 struct number {
   NUMBER_Type type;
   union {
     int int_value;
     double float_value;
+    bool bool_value;
   };
 };
 
@@ -186,7 +184,10 @@ bool is_opcode(char c) {
          c == '}' || c == '=' || c == ',' || c == '.';
 }
 
-bool is_keyword(const char *str) { return strcmp(str, "var") == 0; }
+bool is_keyword(const char *str) {
+  return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
+         strcmp(str, "false") == 0;
+}
 
 struct token scanner_letter(struct scanner *s) {
   unsigned int size = 0;
@@ -198,7 +199,18 @@ struct token scanner_letter(struct scanner *s) {
   unsigned int si =
       s->symbol->insert(s->symbol, s->source->content + s->index, size);
   s->index = s->index + size;
-  if (is_keyword(s->symbol->get(s->symbol, si)->str)) {
+  const char *str = s->symbol->get(s->symbol, si)->str;
+  if (is_keyword(str)) {
+    if (strcmp(str, "true") == 0) {
+      return (struct token){
+          .type = TOKEN_NUM,
+          .value = {.number_value = {.type = NUMBER_BOOL, .bool_value = true}}};
+    }
+    if (strcmp(str, "false") == 0) {
+      return (struct token){.type = TOKEN_NUM,
+                            .value = {.number_value = {.type = NUMBER_BOOL,
+                                                       .bool_value = false}}};
+    }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
   return (struct token){.type = TOKEN_ID, .value = {.symbol_index = si}};
@@ -761,6 +773,9 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     } else if (n.value.number_value.type == NUMBER_FLOAT) {
       number->data.literal_expr.kind = LIT_FLOAT;
       number->data.literal_expr.float_val = n.value.number_value.float_value;
+    } else if (n.value.number_value.type == NUMBER_BOOL) {
+      number->data.literal_expr.kind = LIT_BOOL;
+      number->data.literal_expr.bool_val = n.value.number_value.bool_value;
     }
     return number;
   }
@@ -1393,6 +1408,13 @@ void print(VM *vm) {
     printf("%s\n", vm->root_context->cvalues->get(vm->root_context->cvalues,
                                                   v->data.i_val));
   } break;
+  case VAL_BOOL: {
+    if (v->data.b_val) {
+      printf("true");
+    } else {
+      printf("false");
+    }
+  } break;
   case VAL_REF:
     break;
   default:
@@ -1497,7 +1519,12 @@ INSTRUCTION *NEW_PUSH_F_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_PUSH, v);
 }
 // do nothing now
-INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) { return NULL; }
+INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_BOOL;
+  v->data.b_val = (int)strtod(value, NULL) == 1;
+  return new_inst(I_PUSH, v);
+}
 
 INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
   ZValue *v = (ZValue *)malloc(sizeof(ZValue));

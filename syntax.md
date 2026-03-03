@@ -15,7 +15,7 @@ term       = factor { ( "*" | "/" ) factor } ;
 
 factor     = primary { "(" [ arg_list ] ")" } ; 
 
-primary    = identifier | number | string | array_lit | object_lit | "(" expression ")" ;
+primary    = identifier | number | string | bool |array_list | object_list | "(" expression ")" ;
 
 arg_list   = expression { "," expression } ;
 
