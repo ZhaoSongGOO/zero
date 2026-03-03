@@ -1,23 +1,20 @@
-var a = 1 + 2 * 3;
+func main(){
+    var a = 1 + 2 * 3;
+    var b = (a + 2) * 3;
+    print(a);
+    print("Hello World");
+    var c = [1.3, 2, 3, a];
+    var d = { "key": 1, "address": "abc"};
 
-var b = (a + 2) * 3;
+    var e = false;
 
-print(a);
+    print(false);
 
-print("Hello World");
+    print(true);
 
-var c = [1.3, 2, 3, a];
-
-var d = { "key": 1, "address": "abc"};
-
-var e = false;
-
-print(false);
-
-print(true);
-
-print(1 == 2);
-print(1 != 2);
-print(1 > 2);
-print(1 <= 2);
-print(a == 4);
+    print(1 == 2);
+    print(1 != 2);
+    print(1 > 2);
+    print(1 <= 2);
+    print(a == 4);
+}

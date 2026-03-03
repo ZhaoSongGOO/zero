@@ -1,9 +1,13 @@
 
 ```
-program    = { statement } ;
+program    = { statement | func_define } ;
 
 statement  = var_decl ";" 
-           | expr_stmt ";" ;
+           | expr_stmt ";";
+
+func_define = "func" string"("[params]")" "{" {statement} "}";
+
+params = string {"," string} ;
 
 var_decl   = "var" identifier "=" expression ;
 

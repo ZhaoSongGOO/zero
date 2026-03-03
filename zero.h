@@ -26,6 +26,7 @@ typedef enum {
   TOKEN_ASSIGN,
   TOKEN_ID,
   TOKEN_KEYWORD,
+  TOKEN_FUNC,
   TOKEN_EQUAL,         // ==
   TOKEN_NOT_EQUAL,     // !=
   TOKEN_AND,           // &&
@@ -197,7 +198,7 @@ bool is_opcode(char c) {
 
 bool is_keyword(const char *str) {
   return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
-         strcmp(str, "false") == 0;
+         strcmp(str, "false") == 0 || strcmp(str, "func") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -221,6 +222,9 @@ struct token scanner_letter(struct scanner *s) {
       return (struct token){.type = TOKEN_NUM,
                             .value = {.number_value = {.type = NUMBER_BOOL,
                                                        .bool_value = false}}};
+    }
+    if (strcmp(str, "func") == 0) {
+      return (struct token){.type = TOKEN_FUNC};
     }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
@@ -648,6 +652,8 @@ struct syntax_expr {
     } object_expr;
 
     struct {
+      bool from_params;
+      int offset;
       char *name;
     } identifier_expr;
 
@@ -679,16 +685,58 @@ struct syntax_statement {
   } data;
 };
 
+struct syntax_function_define {
+  const char *name;
+  Map *params; // name -> index
+  struct Vec *statements;
+};
+
+struct syntax_function_define *new_function_define(const char *name) {
+  struct syntax_function_define *fd = (struct syntax_function_define *)malloc(
+      sizeof(struct syntax_function_define));
+  fd->params = new_map();
+  fd->statements = new_vec();
+  fd->name = name;
+  return fd;
+}
+
+struct syntax_top_module {
+  enum {
+    STATEMENT,
+    FUNC_DEFINE,
+  } type;
+  union {
+    struct syntax_statement *statement;
+    struct syntax_function_define *func_define;
+  } data;
+};
+
 struct syntax_program {
   // struct syntax_statement **statements;
   // unsigned int count;
   // unsigned int capacity;
-  struct Vec *statements;
+  struct Vec *modules;
+};
+
+struct parser_scope {
+  struct parser_scope *parent;
+  Map *variables;
+  Map *params;
 };
 
 struct Parser {
   struct scanner *sc;
+  struct parser_scope *cur_scope;
 };
+
+struct parser_scope *new_parser_scope() {
+  struct parser_scope *psp =
+      (struct parser_scope *)malloc(sizeof(struct parser_scope));
+  psp->parent = NULL;
+  psp->variables = new_map();
+  psp->params = new_map();
+  return psp;
+}
 
 struct Parser *parser_init(const char *source_name) {
   struct source *s = read_source(source_name);
@@ -698,12 +746,14 @@ struct Parser *parser_init(const char *source_name) {
   }
   struct Parser *p = (struct Parser *)malloc(sizeof(struct Parser));
   p->sc = scanner_init(s);
+  p->cur_scope = new_parser_scope();
   return p;
 }
 
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
+struct syntax_function_define *parser_function_define(struct Parser *parser);
 struct syntax_expr *parser_logic_or(struct Parser *parser);
 struct syntax_expr *parser_logic_and(struct Parser *parser);
 struct syntax_expr *parser_equality(struct Parser *parser);
@@ -722,13 +772,68 @@ struct syntax_expr *parser_expr(struct Parser *parser);
 struct syntax_program *parser_program(struct Parser *parser) {
   struct syntax_program *program =
       (struct syntax_program *)malloc(sizeof(struct syntax_program));
-  program->statements = new_vec();
+  program->modules = new_vec();
   while (parser->sc->cur_token.type != TOKEN_EOF) {
-    struct syntax_statement *stmt = parser_statement(parser);
-    program->statements->push(program->statements, stmt);
-    expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+    if (parser->sc->cur_token.type == TOKEN_FUNC) {
+      struct parser_scope *psp = new_parser_scope();
+      psp->parent = parser->cur_scope;
+      parser->cur_scope = psp;
+      struct syntax_function_define *func = parser_function_define(parser);
+      parser->cur_scope = parser->cur_scope->parent;
+      struct syntax_top_module *module =
+          (struct syntax_top_module *)malloc(sizeof(struct syntax_top_module));
+      module->type = FUNC_DEFINE;
+      module->data.statement = func;
+      program->modules->push(program->modules, module);
+    } else {
+      struct syntax_statement *stmt = parser_statement(parser);
+      struct syntax_top_module *module =
+          (struct syntax_top_module *)malloc(sizeof(struct syntax_top_module));
+      module->type = STATEMENT;
+      module->data.statement = stmt;
+      program->modules->push(program->modules, module);
+      expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+    }
   }
   return program;
+}
+
+void parser_function_define_params_helper(struct syntax_function_define *fd,
+                                          struct Parser *parser) {
+  while (parser->sc->cur_token.type != TOKEN_RIGHT_PARENT) {
+    struct token n = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, TOKEN_ID);
+    expected_token_type_and_run(parser->sc, TOKEN_COMMA);
+    const char *p =
+        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+    map_insert(fd->params, p, (void *)fd->params->count);
+    map_insert(parser->cur_scope->params, p,
+               (void *)parser->cur_scope->params->count);
+  }
+}
+
+void parser_function_define_statements_helper(struct syntax_function_define *fd,
+                                              struct Parser *parser) {
+  while (parser->sc->cur_token.type != TOKEN_RIGHT_BRACE) {
+    struct syntax_statement *stmt = parser_statement(parser);
+    fd->statements->push(fd->statements, stmt);
+    expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+  }
+}
+
+struct syntax_function_define *parser_function_define(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_FUNC);
+  struct token n = parser->sc->cur_token;
+  expected_token_type_and_run(parser->sc, TOKEN_ID);
+  const char *func_name =
+      parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+  struct syntax_function_define *fd = new_function_define(func_name);
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_PARENT);
+  parser_function_define_params_helper(fd, parser);
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_PARENT);
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
+  parser_function_define_statements_helper(fd, parser);
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
 }
 
 struct syntax_statement *parser_statement(struct Parser *parser) {
@@ -757,6 +862,13 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
   statement->type = STMT_VAR_DECL;
   statement->data.var_stmt.initializer = expr;
   statement->data.var_stmt.name = id_name;
+  if (map_get(parser->cur_scope->variables, id_name) == NULL &&
+      map_get(parser->cur_scope->params, id_name) == NULL) {
+    map_insert(parser->cur_scope->variables, id_name, NULL);
+  } else {
+    printf("variable(%s) redefine\n", id_name);
+    assert(false);
+  }
   return statement;
 }
 
@@ -917,6 +1029,18 @@ void symbol_print(struct str_store *store) {
   }
 }
 
+MapPair *get_variables_from_parser_scope(struct parser_scope *scope,
+                                         const char *key) {
+  while (scope != NULL) {
+    MapPair *pair = map_get(scope->variables, key);
+    if (pair != NULL) {
+      return pair;
+    }
+    scope = scope->parent;
+  }
+  return NULL;
+}
+
 struct syntax_expr *parser_primary(struct Parser *parser) {
   switch (parser->sc->cur_token.type) {
   case TOKEN_NUM: {
@@ -954,8 +1078,22 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     struct syntax_expr *id =
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
     id->type = EXPR_ID;
+    id->data.identifier_expr.from_params = false;
     id->data.identifier_expr.name =
         parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+    MapPair *variable_define_form_var = get_variables_from_parser_scope(
+        parser->cur_scope->parent, id->data.identifier_expr.name);
+    MapPair *variable_define_from_params =
+        map_get(parser->cur_scope->params, id->data.identifier_expr.name);
+    if (variable_define_from_params == NULL &&
+        variable_define_form_var == NULL) {
+      printf("Variable(%s) not defined\n", id->data.identifier_expr.name);
+      assert(false);
+    }
+    if (variable_define_from_params != NULL) {
+      id->data.identifier_expr.from_params = true;
+      id->data.identifier_expr.offset = (int)variable_define_from_params->value;
+    }
     return id;
   }
   case TOKEN_LEFT_BRACKET: // [
@@ -1033,6 +1171,7 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
 }
 
 // parser visitor functions
+void function_define_visitor(struct syntax_function_define *fd);
 void statement_visitor(struct syntax_statement *statment);
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
 void statement_stmt_expr_visitor(struct syntax_statement *statement);
@@ -1045,9 +1184,26 @@ void expression_object_visitor(struct syntax_expr *expr);
 void expression_call_visitor(struct syntax_expr *expr);
 void program_visitor(struct syntax_program *program);
 
+char *CURRENT_FUNCTION_NAME = NULL;
+
 void program_visitor(struct syntax_program *program) {
-  for (int i = 0; i < program->statements->count; i++) {
-    statement_visitor(program->statements->get(program->statements, i));
+  for (int i = 0; i < program->modules->count; i++) {
+    struct syntax_top_module *module =
+        (struct syntax_top_module *)program->modules->get(program->modules, i);
+    if (module->type == STATEMENT) {
+      statement_visitor(module->data.statement);
+    } else if (module->type == FUNC_DEFINE) {
+      function_define_visitor(module->data.func_define);
+    }
+  }
+}
+
+void function_define_visitor(struct syntax_function_define *fd) {
+  CURRENT_FUNCTION_NAME = fd->name;
+  for (int i = 0; i < fd->statements->count; i++) {
+    struct syntax_statement *statement =
+        (struct syntax_top_module *)fd->statements->get(fd->statements, i);
+    statement_visitor(statement);
   }
 }
 
@@ -1136,7 +1292,8 @@ void instruction_to_file() {
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_VAR_DECL);
   expression_visitor(statement->data.var_stmt.initializer);
-  INSTRUCTION_SAVE("main", "STORE %s", statement->data.var_stmt.name);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %s",
+                   statement->data.var_stmt.name);
 }
 void statement_stmt_expr_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_EXPR);
@@ -1146,7 +1303,8 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
   case EXPR_ID:
-    INSTRUCTION_SAVE("main", "LOAD %s", expr->data.identifier_expr.name);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %s",
+                     expr->data.identifier_expr.name);
     break;
   case EXPR_BINARY:
     expression_binary_visitor(expr);
@@ -1176,16 +1334,20 @@ void expression_literal_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_LITERAL);
   switch (expr->data.literal_expr.kind) {
   case LIT_INT:
-    INSTRUCTION_SAVE("main", "PUSH_D %d", expr->data.literal_expr.int_val);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d",
+                     expr->data.literal_expr.int_val);
     break;
   case LIT_FLOAT:
-    INSTRUCTION_SAVE("main", "PUSH_F %f", expr->data.literal_expr.float_val);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_F %f",
+                     expr->data.literal_expr.float_val);
     break;
   case LIT_STR:
-    INSTRUCTION_SAVE("main", "PUSH_S \"%s\"", expr->data.literal_expr.str_val);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S \"%s\"",
+                     expr->data.literal_expr.str_val);
     break;
   case LIT_BOOL:
-    INSTRUCTION_SAVE("main", "PUSH_B %d", expr->data.literal_expr.bool_val);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_B %d",
+                     expr->data.literal_expr.bool_val);
     break;
   default:
     assert(false);
@@ -1198,34 +1360,34 @@ void expression_binary_visitor(struct syntax_expr *expr) {
   expression_visitor(expr->data.binary_expr.right);
   switch (expr->data.binary_expr.op) {
   case TOKEN_ADD:
-    INSTRUCTION_SAVE("main", "ADD");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ADD");
     break;
   case TOKEN_MINUS:
-    INSTRUCTION_SAVE("main", "MINUS");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "MINUS");
     break;
   case TOKEN_MULTI:
-    INSTRUCTION_SAVE("main", "MULTI");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "MULTI");
     break;
   case TOKEN_DIV:
-    INSTRUCTION_SAVE("main", "DIV");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "DIV");
     break;
   case TOKEN_EQUAL:
-    INSTRUCTION_SAVE("main", "E");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "E");
     break;
   case TOKEN_NOT_EQUAL:
-    INSTRUCTION_SAVE("main", "NE");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "NE");
     break;
   case TOKEN_GREATER:
-    INSTRUCTION_SAVE("main", "G");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "G");
     break;
   case TOKEN_GREATER_EQUAL:
-    INSTRUCTION_SAVE("main", "GE");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "GE");
     break;
   case TOKEN_LESS:
-    INSTRUCTION_SAVE("main", "L");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "L");
     break;
   case TOKEN_LESS_EQUAL:
-    INSTRUCTION_SAVE("main", "LE");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LE");
     break;
   default:
     assert(false);
@@ -1237,10 +1399,10 @@ void expression_unary_visitor(struct syntax_expr *expr) {
   expression_visitor(expr->data.binary_expr.right);
   switch (expr->data.binary_expr.op) {
   case TOKEN_MINUS:
-    INSTRUCTION_SAVE("main", "NEGATE");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "NEGATE");
     break;
   case TOKEN_NOT:
-    INSTRUCTION_SAVE("main", "NOT");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "NOT");
     break;
   default:
     assert(false);
@@ -1253,7 +1415,8 @@ void expression_call_visitor(struct syntax_expr *expr) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
   }
-  INSTRUCTION_SAVE("main", "CALL %s", expr->data.call_expr.func_name);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL %s",
+                   expr->data.call_expr.func_name);
 }
 
 void expression_array_visitor(struct syntax_expr *expr) {
@@ -1262,19 +1425,19 @@ void expression_array_visitor(struct syntax_expr *expr) {
   for (int i = 0; i < elements->count; i++) {
     expression_visitor(elements->get(elements, i));
   }
-  INSTRUCTION_SAVE("main", "PUSH_D %d", elements->count);
-  INSTRUCTION_SAVE("main", "CALL NEW_ARRAY");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", elements->count);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_ARRAY");
 }
 void expression_object_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_OBJECT);
   struct Vec *pairs = expr->data.object_expr.pairs;
   for (int i = 0; i < pairs->count; i++) {
     struct syntax_kv_pair *kv = pairs->get(pairs, i);
-    INSTRUCTION_SAVE("main", "PUSH_S %s", kv->key);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", kv->key);
     expression_visitor(kv->value);
   }
-  INSTRUCTION_SAVE("main", "PUSH_D %d", pairs->count);
-  INSTRUCTION_SAVE("main", "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", pairs->count);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
 }
 
 typedef enum {
