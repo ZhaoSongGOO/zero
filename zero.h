@@ -1,6 +1,7 @@
 #ifndef __ZERO_PUBLIC_H__
 #define __ZERO_PUBLIC_H__
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -22,9 +23,18 @@ typedef enum {
   TOKEN_MINUS,
   TOKEN_DIV,
   TOKEN_MULTI,
-  TOKEN_EQUAL,
+  TOKEN_ASSIGN,
   TOKEN_ID,
   TOKEN_KEYWORD,
+  TOKEN_EQUAL,         // ==
+  TOKEN_NOT_EQUAL,     // !=
+  TOKEN_AND,           // &&
+  TOKEN_GREATER,       // >
+  TOKEN_LESS,          // <
+  TOKEN_GREATER_EQUAL, // >=
+  TOKEN_LESS_EQUAL,    // <=
+  TOKEN_OR,            // ||
+  TOKEN_NOT,           // !
   TOKEN_ACCESS,        // .
   TOKEN_COMMA,         // ,
   TOKEN_SEMICOLON,     // ;
@@ -181,7 +191,8 @@ bool is_letter(char c) {
 bool is_opcode(char c) {
   return c == '"' || c == ';' || c == ':' || c == '+' || c == '-' || c == '*' ||
          c == '/' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' ||
-         c == '}' || c == '=' || c == ',' || c == '.';
+         c == '}' || c == '=' || c == ',' || c == '.' || c == '!' || c == '>' ||
+         c == '<' || c == '&' || c == '|';
 }
 
 bool is_keyword(const char *str) {
@@ -276,6 +287,7 @@ struct token scanner_string(struct scanner *s) {
 
 struct token scanner_opcode(struct scanner *s) {
   struct token t = {.type = TOKEN_UNKNOWN};
+  char next = s->source->content[s->index + 1];
   switch (s->source->content[s->index]) {
   case '+':
     t = (struct token){.type = TOKEN_ADD};
@@ -307,9 +319,54 @@ struct token scanner_opcode(struct scanner *s) {
   case '}':
     t = (struct token){.type = TOKEN_RIGHT_BRACE};
     break;
-  case '=':
-    t = (struct token){.type = TOKEN_EQUAL};
-    break;
+  case '=': {
+    if (next == '=') {
+      t = (struct token){.type = TOKEN_EQUAL};
+      s->index += 1;
+    } else {
+      t = (struct token){.type = TOKEN_ASSIGN};
+    }
+  } break;
+  case '&': {
+    if (next == '&') {
+      t = (struct token){.type = TOKEN_AND};
+      s->index += 1;
+    } else {
+      assert(false);
+    }
+  } break;
+  case '|': {
+    if (next == '|') {
+      t = (struct token){.type = TOKEN_OR};
+      s->index += 1;
+    } else {
+      assert(false);
+    }
+  } break;
+  case '!': {
+    if (next == '=') {
+      t = (struct token){.type = TOKEN_NOT_EQUAL};
+      s->index += 1;
+    } else {
+      t = (struct token){.type = TOKEN_NOT};
+    }
+  } break;
+  case '>': {
+    if (next == '=') {
+      t = (struct token){.type = TOKEN_GREATER_EQUAL};
+      s->index += 1;
+    } else {
+      t = (struct token){.type = TOKEN_GREATER};
+    }
+  } break;
+  case '<': {
+    if (next == '=') {
+      t = (struct token){.type = TOKEN_LESS_EQUAL};
+      s->index += 1;
+    } else {
+      t = (struct token){.type = TOKEN_LESS};
+    }
+  } break;
   case ':':
     t = (struct token){.type = TOKEN_COLON};
     break;
@@ -483,8 +540,8 @@ void token_print(struct token t, struct scanner *sc) {
   case TOKEN_DIV:
     printf("TOKEN_DIV:/\n");
     break;
-  case TOKEN_EQUAL:
-    printf("TOKEN_EQUAL:=\n");
+  case TOKEN_ASSIGN:
+    printf("TOKEN_ASSIGN:=\n");
     break;
   case TOKEN_COLON:
     printf("TOKEN_COLON: : \n");
@@ -523,7 +580,6 @@ void token_print(struct token t, struct scanner *sc) {
 }
 
 // Syntax chapter
-#include <assert.h>
 
 void expected_token_type_and_run(struct scanner *sc, TOKEN_TYPE type) {
   // printf("DEBUG: %d--%d\n", sc->cur_token.type, type);
@@ -557,6 +613,7 @@ struct syntax_kv_pair {
 struct syntax_expr {
   enum {
     EXPR_BINARY,
+    EXPR_UNARY,
     EXPR_LITERAL,
     EXPR_CALL,
     EXPR_ARRAY,
@@ -647,10 +704,16 @@ struct Parser *parser_init(const char *source_name) {
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
+struct syntax_expr *parser_logic_or(struct Parser *parser);
+struct syntax_expr *parser_logic_and(struct Parser *parser);
+struct syntax_expr *parser_equality(struct Parser *parser);
+struct syntax_expr *parser_comparison(struct Parser *parser);
+struct syntax_expr *parser_assignment(struct Parser *parser);
 struct syntax_expr *parser_term(struct Parser *parser);
 struct syntax_expr *parser_factory(struct Parser *parser);
 struct syntax_expr *parser_call(struct syntax_expr *caller,
                                 struct Parser *parser);
+struct syntax_expr *parser_primary_call(struct Parser *parser);
 struct syntax_expr *parser_primary(struct Parser *parser);
 struct syntax_expr *parser_arraylist(struct Parser *parser);
 struct syntax_expr *parser_objectlist(struct Parser *parser);
@@ -687,7 +750,7 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
           ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
           ->str;
   expected_token_type_and_run(parser->sc, TOKEN_ID);
-  expected_token_type_and_run(parser->sc, TOKEN_EQUAL);
+  expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
   struct syntax_expr *expr = parser_expr(parser);
   struct syntax_statement *statement =
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
@@ -704,8 +767,83 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
   statement->data.expr_stmt.expr = parser_expr(parser);
   return statement;
 }
-
 struct syntax_expr *parser_expr(struct Parser *parser) {
+  return parser_logic_or(parser);
+}
+
+struct syntax_expr *parser_logic_or(struct Parser *parser) {
+  struct syntax_expr *left = parser_logic_and(parser);
+  while (parser->sc->cur_token.type == TOKEN_OR) {
+    struct token op = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+    struct syntax_expr *right = parser_logic_and(parser);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = left;
+    binary->data.binary_expr.right = right;
+    binary->data.binary_expr.op = op.type;
+    left = binary;
+  }
+  return left;
+}
+
+struct syntax_expr *parser_logic_and(struct Parser *parser) {
+  struct syntax_expr *left = parser_equality(parser);
+  while (parser->sc->cur_token.type == TOKEN_AND) {
+    struct token op = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+    struct syntax_expr *right = parser_equality(parser);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = left;
+    binary->data.binary_expr.right = right;
+    binary->data.binary_expr.op = op.type;
+    left = binary;
+  }
+  return left;
+}
+
+struct syntax_expr *parser_equality(struct Parser *parser) {
+  struct syntax_expr *left = parser_comparison(parser);
+  while (parser->sc->cur_token.type == TOKEN_EQUAL ||
+         parser->sc->cur_token.type == TOKEN_NOT_EQUAL) {
+    struct token op = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+    struct syntax_expr *right = parser_comparison(parser);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = left;
+    binary->data.binary_expr.right = right;
+    binary->data.binary_expr.op = op.type;
+    left = binary;
+  }
+  return left;
+}
+
+struct syntax_expr *parser_comparison(struct Parser *parser) {
+  struct syntax_expr *left = parser_assignment(parser);
+  while (parser->sc->cur_token.type == TOKEN_GREATER ||
+         parser->sc->cur_token.type == TOKEN_GREATER_EQUAL ||
+         parser->sc->cur_token.type == TOKEN_LESS ||
+         parser->sc->cur_token.type == TOKEN_LESS_EQUAL) {
+    struct token op = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+    struct syntax_expr *right = parser_assignment(parser);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = left;
+    binary->data.binary_expr.right = right;
+    binary->data.binary_expr.op = op.type;
+    left = binary;
+  }
+  return left;
+}
+
+struct syntax_expr *parser_assignment(struct Parser *parser) {
   struct syntax_expr *term = parser_term(parser);
   while (parser->sc->cur_token.type == TOKEN_ADD ||
          parser->sc->cur_token.type == TOKEN_MINUS) {
@@ -742,6 +880,26 @@ struct syntax_expr *parser_term(struct Parser *parser) {
 }
 
 struct syntax_expr *parser_factory(struct Parser *parser) {
+  struct token n = parser->sc->cur_token;
+  bool is_unary = false;
+  if (n.type == TOKEN_MINUS || n.type == TOKEN_NOT) {
+    is_unary = true;
+    expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
+  }
+  struct syntax_expr *factory = parser_primary_call(parser);
+  if (is_unary) {
+    struct syntax_expr *unary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    unary->type = EXPR_UNARY;
+    unary->data.binary_expr.op = n.type;
+    unary->data.binary_expr.right = factory;
+    unary->data.binary_expr.left = NULL;
+    factory = unary;
+  }
+  return factory;
+}
+
+struct syntax_expr *parser_primary_call(struct Parser *parser) {
   struct syntax_expr *primary = parser_primary(parser);
   if (parser->sc->cur_token.type == TOKEN_LEFT_PARENT) {
     primary = parser_call(primary, parser);
@@ -881,6 +1039,7 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement);
 void expression_visitor(struct syntax_expr *expr);
 void expression_literal_visitor(struct syntax_expr *expr);
 void expression_binary_visitor(struct syntax_expr *expr);
+void expression_unary_visitor(struct syntax_expr *expr);
 void expression_array_visitor(struct syntax_expr *expr);
 void expression_object_visitor(struct syntax_expr *expr);
 void expression_call_visitor(struct syntax_expr *expr);
@@ -992,6 +1151,9 @@ void expression_visitor(struct syntax_expr *expr) {
   case EXPR_BINARY:
     expression_binary_visitor(expr);
     break;
+  case EXPR_UNARY:
+    expression_unary_visitor(expr);
+    break;
   case EXPR_LITERAL:
     expression_literal_visitor(expr);
     break;
@@ -1046,6 +1208,39 @@ void expression_binary_visitor(struct syntax_expr *expr) {
     break;
   case TOKEN_DIV:
     INSTRUCTION_SAVE("main", "DIV");
+    break;
+  case TOKEN_EQUAL:
+    INSTRUCTION_SAVE("main", "E");
+    break;
+  case TOKEN_NOT_EQUAL:
+    INSTRUCTION_SAVE("main", "NE");
+    break;
+  case TOKEN_GREATER:
+    INSTRUCTION_SAVE("main", "G");
+    break;
+  case TOKEN_GREATER_EQUAL:
+    INSTRUCTION_SAVE("main", "GE");
+    break;
+  case TOKEN_LESS:
+    INSTRUCTION_SAVE("main", "L");
+    break;
+  case TOKEN_LESS_EQUAL:
+    INSTRUCTION_SAVE("main", "LE");
+    break;
+  default:
+    assert(false);
+  }
+}
+
+void expression_unary_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_UNARY);
+  expression_visitor(expr->data.binary_expr.right);
+  switch (expr->data.binary_expr.op) {
+  case TOKEN_MINUS:
+    INSTRUCTION_SAVE("main", "NEGATE");
+    break;
+  case TOKEN_NOT:
+    INSTRUCTION_SAVE("main", "NOT");
     break;
   default:
     assert(false);
@@ -1126,7 +1321,15 @@ typedef enum {
   I_MINUS,
   I_LOAD,
   I_STORE,
-  I_CALL
+  I_CALL,
+  I_G,
+  I_GE,
+  I_L,
+  I_LE,
+  I_E,
+  I_NE,
+  I_NOT,
+  I_NEGATE,
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -1203,6 +1406,14 @@ INSTRUCTION *NEW_ADD_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_MINUS_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_MULTI_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_DIV_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_G_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_GE_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_L_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_LE_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_NEGATE_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_NOT_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_EQUAL_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value);
 
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
@@ -1217,6 +1428,14 @@ void init_actions() {
   map_insert(actions, "MINUS", NEW_MINUS_INSTRUCTION);
   map_insert(actions, "MULTI", NEW_MULTI_INSTRUCTION);
   map_insert(actions, "DIV", NEW_DIV_INSTRUCTION);
+  map_insert(actions, "G", NEW_G_INSTRUCTION);
+  map_insert(actions, "GE", NEW_GE_INSTRUCTION);
+  map_insert(actions, "L", NEW_L_INSTRUCTION);
+  map_insert(actions, "LE", NEW_LE_INSTRUCTION);
+  map_insert(actions, "NOT", NEW_NOT_INSTRUCTION);
+  map_insert(actions, "NEGATE", NEW_NEGATE_INSTRUCTION);
+  map_insert(actions, "E", NEW_EQUAL_INSTRUCTION);
+  map_insert(actions, "NE", NEW_NOT_EQUAL_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -1307,12 +1526,12 @@ void PUSH_INST_RUN(VM *vm, ZValue *value) { vm->stacks[++vm->sp] = value; }
 
 void STORE_INST_RUN(VM *vm, ZValue *value) {
   ZValue *v = vm->stacks[vm->sp--];
-  printf("STORE---> %ld\n", v);
+  // printf("STORE---> %ld\n", v);
   value->data.ptr = v;
 }
 
 void LOAD_INST_RUN(VM *vm, ZValue *value) {
-  printf("LOAD---> %ld\n", value);
+  // printf("LOAD---> %ld\n", value);
   vm->stacks[++vm->sp] = value;
 }
 
@@ -1323,8 +1542,10 @@ ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
   if (right->type == VAL_REF) {
     right = (ZValue *)(right->data.ptr);
   }
-  assert(left->type == VAL_INT || left->type == VAL_FLOAT);
-  assert(right->type == VAL_INT || right->type == VAL_FLOAT);
+  assert(left->type == VAL_INT || left->type == VAL_FLOAT ||
+         left->type == VAL_BOOL);
+  assert(right->type == VAL_INT || right->type == VAL_FLOAT ||
+         right->type == VAL_BOOL);
   ZValue *result = (ZValue *)malloc(sizeof(ZValue));
   bool is_int = false;
   if (left->type == VAL_INT || right->type == VAL_INT) {
@@ -1335,14 +1556,18 @@ ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
   float r = 0;
   if (left->type == VAL_INT) {
     l = left->data.i_val;
-  } else {
+  } else if (left->type == VAL_FLOAT) {
     l = left->data.f_val;
+  } else if (left->type == VAL_BOOL) {
+    l = left->data.b_val ? 1 : 0;
   }
 
   if (right->type == VAL_INT) {
     r = right->data.i_val;
-  } else {
+  } else if (right->type == VAL_FLOAT) {
     r = right->data.f_val;
+  } else if (left->type == VAL_BOOL) {
+    r = left->data.b_val ? 1 : 0;
   }
   float s = 0;
   switch (type) {
@@ -1389,6 +1614,85 @@ void MULTI_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[--(vm->sp)] = result;
 }
 
+float get_number_value_from_zvalue(VM *vm, ZValue *v) {
+  if (v->type == VAL_INT) {
+    return v->data.i_val;
+  } else if (v->type == VAL_FLOAT) {
+    return v->data.f_val;
+  } else if (v->type == VAL_BOOL) {
+    return v->data.b_val;
+  } else if (v->type == VAL_REF) {
+    return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
+  } else {
+    assert(false);
+  }
+}
+
+void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
+  ZValue *result = (ZValue *)malloc(sizeof(ZValue));
+  result->type = VAL_BOOL;
+  bool v = false;
+  if (code >= I_G && code <= I_NE) {
+    float left = get_number_value_from_zvalue(vm, vm->stacks[vm->sp - 1]);
+    float right = get_number_value_from_zvalue(vm, vm->stacks[vm->sp]);
+    switch (code) {
+    case I_G:
+      v = left > right;
+      break;
+    case I_GE:
+      v = left >= right;
+      break;
+    case I_L:
+      v = left < right;
+      break;
+    case I_LE:
+      v = left <= right;
+      break;
+    case I_E:
+      v = left == right;
+      break;
+    case I_NE:
+      v = left != right;
+      break;
+    default:
+      assert(false);
+      break;
+    }
+    result->data.b_val = v;
+    vm->stacks[vm->sp - 1] = result;
+    vm->sp -= 1;
+  } else if (code == I_NOT) {
+    float right = get_number_value_from_zvalue(vm, vm->stacks[vm->sp]);
+    result->data.b_val = !right;
+    vm->stacks[vm->sp] = result;
+  } else if (code == I_NEGATE) {
+    ZValue *rv = vm->stacks[vm->sp];
+    float v = -1 * get_number_value_from_zvalue(vm, rv);
+    ZValue *re = (ZValue *)malloc(sizeof(ZValue));
+    if (rv->type == VAL_REF) {
+      rv = (ZValue *)rv->data.ptr;
+    }
+    switch (rv->type) {
+    case VAL_INT: {
+      re->type = VAL_INT;
+      re->data.i_val = v;
+    } break;
+    case VAL_FLOAT: {
+      re->type = VAL_FLOAT;
+      re->data.f_val = v;
+    } break;
+    case VAL_BOOL: {
+      re->type = VAL_FLOAT;
+      re->data.b_val = v != 0;
+    } break;
+    default:
+      assert(false);
+      break;
+    }
+    vm->stacks[vm->sp] = re;
+  }
+}
+
 void DIV_INST_RUN(VM *vm, ZValue *value) {
   ZValue *result =
       inst_run_op(TOKEN_DIV, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
@@ -1399,10 +1703,10 @@ void print(VM *vm) {
   ZValue *v = vm->stacks[vm->sp--];
   switch (v->type) {
   case VAL_INT:
-    printf("%d", v->data.i_val);
+    printf("%d\n", v->data.i_val);
     break;
   case VAL_FLOAT:
-    printf("%ld", v->data.f_val);
+    printf("%ld\n", v->data.f_val);
     break;
   case VAL_STR_INDEX: {
     printf("%s\n", vm->root_context->cvalues->get(vm->root_context->cvalues,
@@ -1410,12 +1714,13 @@ void print(VM *vm) {
   } break;
   case VAL_BOOL: {
     if (v->data.b_val) {
-      printf("true");
+      printf("true\n");
     } else {
-      printf("false");
+      printf("false\n");
     }
   } break;
   case VAL_REF:
+    printf("Ref(%ld)\n", v);
     break;
   default:
     break;
@@ -1471,11 +1776,20 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       CALL_INST_RUN(vm, (ZValue *)inst->v);
       vm->cur_context = func->ctx;
     } break;
+    case I_G:
+    case I_GE:
+    case I_L:
+    case I_LE:
+    case I_NEGATE:
+    case I_NOT:
+    case I_E:
+    case I_NE:
+      LOGIC_INST_RUN(vm, inst->v, inst->code);
+      break;
     default:
       assert(false);
     }
   }
-
   vm->cur_context = func->ctx->parent;
 }
 
@@ -1560,6 +1874,31 @@ INSTRUCTION *NEW_MULTI_INSTRUCTION(VM *vm, const char *value) {
 }
 INSTRUCTION *NEW_DIV_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_DIV, NULL);
+}
+
+INSTRUCTION *NEW_G_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_G, NULL);
+}
+INSTRUCTION *NEW_GE_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_GE, NULL);
+}
+INSTRUCTION *NEW_L_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_L, NULL);
+}
+INSTRUCTION *NEW_LE_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_LE, NULL);
+}
+INSTRUCTION *NEW_NEGATE_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_NEGATE, NULL);
+}
+INSTRUCTION *NEW_NOT_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_NOT, NULL);
+}
+INSTRUCTION *NEW_EQUAL_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_E, NULL);
+}
+INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_NE, NULL);
 }
 
 #endif

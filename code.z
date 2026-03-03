@@ -15,3 +15,9 @@ var e = false;
 print(false);
 
 print(true);
+
+print(1 == 2);
+print(1 != 2);
+print(1 > 2);
+print(1 <= 2);
+print(a == 4);

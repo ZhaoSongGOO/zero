@@ -9,11 +9,31 @@ var_decl   = "var" identifier "=" expression ;
 
 expr_stmt  = expression ; 
 
-expression = assignment ;
+expression = logic_or;
+
+# level 1
+logic_or = logic_and { "||" logic_and };
+
+# level 2
+logic_and = equality { "&&" equality };
+
+# level 3
+equality = comparison [("==" | "!=") comparison];
+
+# level 4
+comparison = assignment [(">" | "<" | ">=" | "<=" ) assignment];
+
+# level 5
 assignment = term { ( "+" | "-" ) term } ;
+
+# level 6
 term       = factor { ( "*" | "/" ) factor } ;
 
-factor     = primary { "(" [ arg_list ] ")" } ; 
+# level 7
+factor     = [ "!" | "-" ] primary_call ; 
+
+# level 8
+primary_call = primary { "(" [ arg_list ] ")" };
 
 primary    = identifier | number | string | bool |array_list | object_list | "(" expression ")" ;
 
