@@ -7,13 +7,16 @@ statement  = var_decl ";"
 
 func_define = "func" string"("[params]")" "{" {statement} "}";
 
-params = string {"," string} ;
+params = identifier {"," identifier} ;
 
 var_decl   = "var" identifier "=" expression ;
 
 expr_stmt  = expression ; 
 
-expression = logic_or;
+expression = assign_expr ;
+
+assign_expr = identifier "=" assign_expr 
+            | logic_or ;
 
 # level 1
 logic_or = logic_and { "||" logic_and };

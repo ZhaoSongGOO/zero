@@ -803,12 +803,12 @@ void parser_function_define_params_helper(struct syntax_function_define *fd,
   while (parser->sc->cur_token.type != TOKEN_RIGHT_PARENT) {
     struct token n = parser->sc->cur_token;
     expected_token_type_and_run(parser->sc, TOKEN_ID);
-    expected_token_type_and_run(parser->sc, TOKEN_COMMA);
     const char *p =
         parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
     map_insert(fd->params, p, (void *)fd->params->count);
     map_insert(parser->cur_scope->params, p,
                (void *)parser->cur_scope->params->count);
+    soft_expected_token_type_and_run(parser->sc, TOKEN_COMMA);
   }
 }
 
@@ -1305,10 +1305,15 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
-  case EXPR_ID:
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %s",
-                     expr->data.identifier_expr.name);
-    break;
+  case EXPR_ID: {
+    if (expr->data.identifier_expr.from_params) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD_BP -%d",
+                       expr->data.identifier_expr.offset);
+    } else {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %s",
+                       expr->data.identifier_expr.name);
+    }
+  } break;
   case EXPR_BINARY:
     expression_binary_visitor(expr);
     break;
