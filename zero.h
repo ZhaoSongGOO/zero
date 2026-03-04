@@ -834,6 +834,7 @@ struct syntax_function_define *parser_function_define(struct Parser *parser) {
   expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
   parser_function_define_statements_helper(fd, parser);
   expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
+  return fd;
 }
 
 struct syntax_statement *parser_statement(struct Parser *parser) {
@@ -1192,6 +1193,7 @@ void program_visitor(struct syntax_program *program) {
     struct syntax_top_module *module =
         (struct syntax_top_module *)program->modules->get(program->modules, i);
     if (module->type == STATEMENT) {
+      CURRENT_FUNCTION_NAME = "_static";
       statement_visitor(module->data.statement);
     } else if (module->type == FUNC_DEFINE) {
       function_define_visitor(module->data.func_define);
@@ -1545,6 +1547,7 @@ ZFunction *new_function() {
 }
 
 struct zero_vm {
+  ZFunction *global;
   ZFunction *entry;
   Context *root_context;
   Context *cur_context;
@@ -1650,6 +1653,9 @@ void list_inst_store(MapPair *pair, void *data) {
   value->data.ptr = f;
   if (strcmp(pair->key, "main") == 0) {
     vm->entry = value;
+  }
+  if (strcmp(pair->key, "_static") == 0) {
+    vm->global = value;
   }
   map_insert(vm->root_context->symbols, pair->key, value);
   vm->cur_context = f->ctx->parent;
@@ -1957,7 +1963,12 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   vm->cur_context = func->ctx->parent;
 }
 
-int VM_Run(VM *vm) { CALL_INST_RUN(vm, vm->entry); }
+int VM_Run(VM *vm) {
+  if (vm->global != NULL) {
+    CALL_INST_RUN(vm, vm->global);
+  }
+  CALL_INST_RUN(vm, vm->entry);
+}
 
 VM *new_vm() {
   VM *vm = (VM *)malloc(sizeof(VM));

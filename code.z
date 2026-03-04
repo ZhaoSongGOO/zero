@@ -1,3 +1,9 @@
+print("Hello");
+
+func sayHi(){
+    print("hi");
+}
+
 func main(){
     var a = 1 + 2 * 3;
     var b = (a + 2) * 3;
@@ -17,4 +23,5 @@ func main(){
     print(1 > 2);
     print(1 <= 2);
     print(a == 4);
+    sayHi();
 }
