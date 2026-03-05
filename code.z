@@ -24,4 +24,9 @@ func main(){
     print(1 <= 2);
     print(a == 4);
     sayHi();
+
+    var x = 1;
+    print(x+1);
+    x = 2 * 3;
+    print(x+1);
 }

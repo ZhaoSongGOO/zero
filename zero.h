@@ -754,6 +754,7 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
 struct syntax_function_define *parser_function_define(struct Parser *parser);
+struct syntax_expr *parser_assignment_expr(struct Parser *parser);
 struct syntax_expr *parser_logic_or(struct Parser *parser);
 struct syntax_expr *parser_logic_and(struct Parser *parser);
 struct syntax_expr *parser_equality(struct Parser *parser);
@@ -803,7 +804,7 @@ void parser_function_define_params_helper(struct syntax_function_define *fd,
   while (parser->sc->cur_token.type != TOKEN_RIGHT_PARENT) {
     struct token n = parser->sc->cur_token;
     expected_token_type_and_run(parser->sc, TOKEN_ID);
-    expected_token_type_and_run(parser->sc, TOKEN_COMMA);
+    soft_expected_token_type_and_run(parser->sc, TOKEN_COMMA);
     const char *p =
         parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
     map_insert(fd->params, p, (void *)fd->params->count);
@@ -881,7 +882,26 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
   return statement;
 }
 struct syntax_expr *parser_expr(struct Parser *parser) {
-  return parser_logic_or(parser);
+  if (parser->sc->cur_token.type == TOKEN_ID &&
+      parser->sc->next_token.type == TOKEN_ASSIGN) {
+    struct syntax_expr *id = parser_primary(parser);
+    expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
+    struct syntax_expr *binary =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    binary->type = EXPR_BINARY;
+    binary->data.binary_expr.left = id;
+    binary->data.binary_expr.right = parser_expr(parser);
+    binary->data.binary_expr.op = TOKEN_ASSIGN;
+    return binary;
+  } else {
+    return parser_logic_or(parser);
+  }
+}
+
+struct syntax_expr *parser_assignment_expr(struct Parser *parser) {
+  if (parser->sc->cur_token.type == TOKEN_ID &&
+      parser->sc->next_token.type == TOKEN_ASSIGN) {
+  }
 }
 
 struct syntax_expr *parser_logic_or(struct Parser *parser) {
@@ -1392,6 +1412,9 @@ void expression_binary_visitor(struct syntax_expr *expr) {
   case TOKEN_LESS_EQUAL:
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LE");
     break;
+  case TOKEN_ASSIGN:
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ASSIGN");
+    break;
   default:
     assert(false);
   }
@@ -1496,6 +1519,7 @@ typedef enum {
   I_NE,
   I_NOT,
   I_NEGATE,
+  I_ASSIGN,
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -1581,6 +1605,7 @@ INSTRUCTION *NEW_NEGATE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_NOT_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_EQUAL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value);
 
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
@@ -1603,6 +1628,7 @@ void init_actions() {
   map_insert(actions, "NEGATE", NEW_NEGATE_INSTRUCTION);
   map_insert(actions, "E", NEW_EQUAL_INSTRUCTION);
   map_insert(actions, "NE", NEW_NOT_EQUAL_INSTRUCTION);
+  map_insert(actions, "ASSIGN", NEW_ASSIGN_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -1863,6 +1889,17 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
   }
 }
 
+void ASSIGN_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *source = vm->stacks[vm->sp--];
+  ZValue *target = vm->stacks[vm->sp];
+  assert(target->type == VAL_REF);
+  if (source->type != VAL_REF) {
+    target->data.ptr = source;
+  } else {
+    target->data.ptr = source->data.ptr;
+  }
+}
+
 void DIV_INST_RUN(VM *vm, ZValue *value) {
   ZValue *result =
       inst_run_op(TOKEN_DIV, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
@@ -1955,6 +1992,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_E:
     case I_NE:
       LOGIC_INST_RUN(vm, inst->v, inst->code);
+      break;
+    case I_ASSIGN:
+      ASSIGN_INST_RUN(vm, (ZValue *)inst->v);
       break;
     default:
       assert(false);
@@ -2074,6 +2114,10 @@ INSTRUCTION *NEW_EQUAL_INSTRUCTION(VM *vm, const char *value) {
 }
 INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_NE, NULL);
+}
+
+INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_ASSIGN, NULL);
 }
 
 #endif
