@@ -27,6 +27,7 @@ typedef enum {
   TOKEN_ID,
   TOKEN_KEYWORD,
   TOKEN_FUNC,
+  TOKEN_RETURN,
   TOKEN_EQUAL,         // ==
   TOKEN_NOT_EQUAL,     // !=
   TOKEN_AND,           // &&
@@ -198,7 +199,8 @@ bool is_opcode(char c) {
 
 bool is_keyword(const char *str) {
   return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
-         strcmp(str, "false") == 0 || strcmp(str, "func") == 0;
+         strcmp(str, "false") == 0 || strcmp(str, "func") == 0 ||
+         strcmp(str, "return") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -225,6 +227,9 @@ struct token scanner_letter(struct scanner *s) {
     }
     if (strcmp(str, "func") == 0) {
       return (struct token){.type = TOKEN_FUNC};
+    }
+    if (strcmp(str, "return") == 0) {
+      return (struct token){.type = TOKEN_RETURN};
     }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
@@ -671,7 +676,7 @@ struct syntax_expr {
 };
 
 struct syntax_statement {
-  enum { STMT_VAR_DECL, STMT_EXPR } type;
+  enum { STMT_VAR_DECL, STMT_EXPR, STMT_RETURN } type;
 
   union {
     struct {
@@ -682,6 +687,10 @@ struct syntax_statement {
     struct {
       struct syntax_expr *expr;
     } expr_stmt;
+
+    struct {
+      struct syntax_expr *expr;
+    } ret_stmt;
   } data;
 };
 
@@ -752,6 +761,7 @@ struct Parser *parser_init(const char *source_name) {
 
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
+struct syntax_statement *parser_ret_stmt(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
 struct syntax_function_define *parser_function_define(struct Parser *parser);
 struct syntax_expr *parser_assignment_expr(struct Parser *parser);
@@ -847,7 +857,20 @@ struct syntax_statement *parser_statement(struct Parser *parser) {
              "var") == 0) {
     return parser_var_decl_stmt(parser);
   }
+  if (cur_token.type == TOKEN_RETURN) {
+    return parser_ret_stmt(parser);
+  }
   return parser_expr_stmt(parser);
+}
+
+struct syntax_statement *parser_ret_stmt(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_RETURN);
+  struct syntax_expr *expr = parser_expr(parser);
+  struct syntax_statement *statement =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  statement->type = STMT_RETURN;
+  statement->data.ret_stmt.expr = expr;
+  return statement;
 }
 
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
@@ -1192,11 +1215,14 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
   return expr;
 }
 
+void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...);
+
 // parser visitor functions
 void function_define_visitor(struct syntax_function_define *fd);
 void statement_visitor(struct syntax_statement *statment);
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
 void statement_stmt_expr_visitor(struct syntax_statement *statement);
+void statement_stmt_ret_visitor(struct syntax_statement *statement);
 void expression_visitor(struct syntax_expr *expr);
 void expression_literal_visitor(struct syntax_expr *expr);
 void expression_binary_visitor(struct syntax_expr *expr);
@@ -1236,10 +1262,18 @@ void statement_visitor(struct syntax_statement *statment) {
     return statement_stmt_var_decl_visitor(statment);
   case STMT_EXPR:
     return statement_stmt_expr_visitor(statment);
+  case STMT_RETURN:
+    return statement_stmt_ret_visitor(statment);
   default:
     assert(false);
     break;
   }
+}
+
+void statement_stmt_ret_visitor(struct syntax_statement *statement) {
+  expression_visitor(statement->data.ret_stmt.expr);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE [ei]",
+                   statement->data.var_stmt.name);
 }
 
 struct instruction_store {
@@ -1448,6 +1482,9 @@ void expression_call_visitor(struct syntax_expr *expr) {
   }
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL %s",
                    expr->data.call_expr.func_name);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
+                   expr->data.call_expr.args->count);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
 
 void expression_array_visitor(struct syntax_expr *expr) {
@@ -1480,7 +1517,8 @@ typedef enum {
   VAL_BOOL,
   VAL_FUNC,
   VAL_REF,
-  VAL_OFFSET
+  VAL_OFFSET,
+  VAL_REGISTER
 } ValueType;
 
 typedef struct {
@@ -1526,6 +1564,7 @@ typedef enum {
   I_NOT,
   I_NEGATE,
   I_ASSIGN,
+  I_FREE
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -1557,6 +1596,7 @@ typedef struct {
   Context *ctx;
   bool is_builtin;
   const char *name;
+  int params_count;
 } ZFunction;
 
 Context *new_context() {
@@ -1584,8 +1624,9 @@ struct zero_vm {
   Context *root_context;
   Context *cur_context;
   Map *ready_link;
-  unsigned int sp; // stack top
+  int sp; // stack top
   void *stacks[256];
+  Map *registers;
 };
 #define VM struct zero_vm
 
@@ -1613,6 +1654,7 @@ INSTRUCTION *NEW_NOT_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_EQUAL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
@@ -1636,6 +1678,7 @@ void init_actions() {
   map_insert(actions, "E", NEW_EQUAL_INSTRUCTION);
   map_insert(actions, "NE", NEW_NOT_EQUAL_INSTRUCTION);
   map_insert(actions, "ASSIGN", NEW_ASSIGN_INSTRUCTION);
+  map_insert(actions, "FREE", NEW_FREE_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -1729,18 +1772,52 @@ void PUSH_INST_RUN(VM *vm, ZValue *value) { vm->stacks[++vm->sp] = value; }
 
 void STORE_INST_RUN(VM *vm, ZValue *value) {
   ZValue *v = vm->stacks[vm->sp--];
-  // printf("STORE---> %ld\n", v);
-  value->data.ptr = v;
+  if (value->type == VAL_REGISTER) {
+    map_insert(vm->registers, (const char *)(value->data.ptr), v);
+  } else {
+    // printf("STORE---> %ld\n", v);
+    value->data.ptr = v;
+  }
 }
 
 void LOAD_INST_RUN(VM *vm, ZValue *value) {
   // printf("LOAD---> %ld\n", value);
-  if (value->type != VAL_OFFSET) {
-    vm->stacks[++vm->sp] = value;
-  } else {
+  if (value->type == VAL_OFFSET) {
     int offset = value->data.i_val;
     ZValue *src = vm->stacks[vm->cur_context->bp - offset];
-    vm->stacks[++vm->sp] = src;
+    if (src->type == VAL_REF) {
+      vm->stacks[++vm->sp] = src;
+    } else {
+      ZValue *zref = (ZValue *)malloc(sizeof(ZValue));
+      zref->type = VAL_REF;
+      zref->data.ptr = src;
+      /*
+        When a function argument is a literal, such as f(1);, any reference
+        operation performed on that input within function f will cause its type
+        on the stack to be converted to VAL_REF.
+
+        ```
+          func main(){
+            show(2);
+          }
+
+          func show(a){
+            a = 1;
+            print(a); // expected 1
+          }
+        ```
+      */
+      vm->stacks[vm->cur_context->bp - offset] = zref;
+      vm->stacks[++vm->sp] = zref;
+    }
+  } else if (value->type == VAL_REGISTER) {
+    MapPair *rv = map_get(vm->registers, (const char *)(value->data.ptr));
+    if (rv->value != NULL) {
+      vm->stacks[++vm->sp] = rv->value;
+      rv->value = NULL;
+    }
+  } else {
+    vm->stacks[++vm->sp] = value;
   }
 }
 
@@ -1919,8 +1996,14 @@ void DIV_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[--(vm->sp)] = result;
 }
 
+void FREE_INST_RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_INT);
+  int free_size = value->data.i_val;
+  vm->sp -= free_size;
+}
+
 void print(VM *vm) {
-  ZValue *v = vm->stacks[vm->sp--];
+  ZValue *v = vm->stacks[vm->sp];
   switch (v->type) {
   case VAL_INT:
     printf("%d\n", v->data.i_val);
@@ -1959,14 +2042,15 @@ void call_builtin_function(VM *vm, ZFunction *func) {
 void CALL_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
-  if (func->is_builtin) {
-    call_builtin_function(vm, func);
-    return;
-  }
   func->ctx->pc = 0;
   func->ctx->bp = vm->sp;
   // func->ctx->parent = vm->cur_context;
   vm->cur_context = func->ctx;
+  if (func->is_builtin) {
+    call_builtin_function(vm, func);
+    vm->cur_context = func->ctx->parent;
+    return;
+  }
   struct Vec *code = func->instructions;
   for (; func->ctx->pc < code->count; func->ctx->pc++) {
     INSTRUCTION *inst = (INSTRUCTION *)code->get(code, func->ctx->pc);
@@ -2010,11 +2094,21 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_ASSIGN:
       ASSIGN_INST_RUN(vm, (ZValue *)inst->v);
       break;
+    case I_FREE:
+      FREE_INST_RUN(vm, inst->v);
+      break;
     default:
       assert(false);
     }
   }
   vm->cur_context = func->ctx->parent;
+  /*
+  It's very important!
+  Very important: The FREE instruction cleans up parameters from the source
+  function stack, but you are responsible for clearing the data inside the
+  sub-function stack yourself.
+  */
+  vm->sp = func->ctx->bp;
 }
 
 int VM_Run(VM *vm) {
@@ -2032,15 +2126,30 @@ VM *new_vm() {
   vm->ready_link = new_map();
   vm->global = NULL;
   vm->sp = -1;
+  vm->registers = new_map();
+  map_insert(vm->registers, "ei", NULL);
   return vm;
 }
 
 INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_REF;
-  map_insert(vm->cur_context->refs, value, v);
-  v->data.ptr = value;
-  return new_inst(I_STORE, v);
+  if (value[0] == '[') {
+    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
+    zv->type = VAL_REGISTER;
+    int full_len = strlen(value);
+    assert(full_len > 2);
+    int content_len = full_len - 2;
+    char *name = (char *)malloc(sizeof(char) * (content_len + 1));
+    memcpy(name, value + 1, content_len);
+    name[content_len] = '\0';
+    zv->data.ptr = name;
+    return new_inst(I_STORE, zv);
+  } else {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = VAL_REF;
+    map_insert(vm->cur_context->refs, value, v);
+    v->data.ptr = value;
+    return new_inst(I_STORE, v);
+  }
 }
 
 MapPair *get_map_pair_from_context(VM *vm, const char *value) {
@@ -2066,6 +2175,17 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
     zv->type = VAL_OFFSET;
     zv->data.i_val = offset;
+    return new_inst(I_LOAD, zv);
+  } else if (value[0] == '[') {
+    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
+    zv->type = VAL_REGISTER;
+    int full_len = strlen(value);
+    assert(full_len > 2);
+    int content_len = full_len - 2;
+    char *name = (char *)malloc(sizeof(char) * (content_len + 1));
+    memcpy(name, value + 1, content_len);
+    name[content_len] = '\0';
+    zv->data.ptr = name;
     return new_inst(I_LOAD, zv);
   } else {
     MapPair *pair = get_map_pair_from_context(vm, value);
@@ -2158,6 +2278,13 @@ INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_ASSIGN, NULL);
+}
+
+INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_INT;
+  v->data.i_val = (int)strtod(value, NULL);
+  return new_inst(I_FREE, v);
 }
 
 #endif

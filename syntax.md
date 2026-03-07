@@ -3,7 +3,10 @@
 program    = { statement | func_define } ;
 
 statement  = var_decl ";" 
-           | expr_stmt ";";
+           | expr_stmt ";"
+           | ret_stmt ";" ;
+           
+ret_stmt = "return" [expression];
 
 func_define = "func" string"("[params]")" "{" {statement} "}";
 
