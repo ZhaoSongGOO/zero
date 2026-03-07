@@ -48,7 +48,7 @@ func show(a){
 ```
 
 
-4. support function return
+4.✅ support function return
 
 ```js
 func add(a, b){
