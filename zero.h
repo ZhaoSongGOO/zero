@@ -1325,10 +1325,15 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
-  case EXPR_ID:
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %s",
-                     expr->data.identifier_expr.name);
-    break;
+  case EXPR_ID: {
+    if (expr->data.identifier_expr.from_params) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d", // sp-%d
+                       expr->data.identifier_expr.offset);
+    } else {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %s",
+                       expr->data.identifier_expr.name);
+    }
+  } break;
   case EXPR_BINARY:
     expression_binary_visitor(expr);
     break;
@@ -1437,7 +1442,7 @@ void expression_unary_visitor(struct syntax_expr *expr) {
 
 void expression_call_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_CALL);
-  for (int i = 0; i < expr->data.call_expr.args->count; i++) {
+  for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
   }
@@ -1474,7 +1479,8 @@ typedef enum {
   VAL_ARR_PTR,
   VAL_BOOL,
   VAL_FUNC,
-  VAL_REF
+  VAL_REF,
+  VAL_OFFSET
 } ValueType;
 
 typedef struct {
@@ -1528,6 +1534,7 @@ struct zero_context {
   Map *refs;
   struct zero_context *parent;
   unsigned int pc; // current pc
+  unsigned int bp;
 };
 
 #define Context struct zero_context
@@ -1558,6 +1565,7 @@ Context *new_context() {
   ctx->parent = NULL;
   ctx->cvalues = new_vec();
   ctx->refs = new_map();
+  ctx->bp = 0;
   return ctx;
 }
 
@@ -1577,7 +1585,6 @@ struct zero_vm {
   Context *cur_context;
   Map *ready_link;
   unsigned int sp; // stack top
-  unsigned int bp; // stack bottom
   void *stacks[256];
 };
 #define VM struct zero_vm
@@ -1728,7 +1735,13 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
 
 void LOAD_INST_RUN(VM *vm, ZValue *value) {
   // printf("LOAD---> %ld\n", value);
-  vm->stacks[++vm->sp] = value;
+  if (value->type != VAL_OFFSET) {
+    vm->stacks[++vm->sp] = value;
+  } else {
+    int offset = value->data.i_val;
+    ZValue *src = vm->stacks[vm->cur_context->bp - offset];
+    vm->stacks[++vm->sp] = src;
+  }
 }
 
 ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
@@ -1951,6 +1964,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     return;
   }
   func->ctx->pc = 0;
+  func->ctx->bp = vm->sp;
   // func->ctx->parent = vm->cur_context;
   vm->cur_context = func->ctx;
   struct Vec *code = func->instructions;
@@ -2029,9 +2043,17 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
 }
 
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
-  MapPair *pair = map_get(vm->cur_context->refs, value);
-  assert(pair != NULL);
-  return new_inst(I_LOAD, pair->value);
+  if (value[0] == '#') {
+    int offset = (int)strtod(value + 1, NULL);
+    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
+    zv->type = VAL_OFFSET;
+    zv->data.i_val = offset;
+    return new_inst(I_LOAD, zv);
+  } else {
+    MapPair *pair = map_get(vm->cur_context->refs, value);
+    assert(pair != NULL);
+    return new_inst(I_LOAD, pair->value);
+  }
 }
 
 INSTRUCTION *NEW_PUSH_D_INSTRUCTION(VM *vm, const char *value) {

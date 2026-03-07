@@ -21,8 +21,8 @@ func add(a, b){
 }
 
 add:
-  LOAD_BP -0
-  LOAD_BP -1
+  LOAD #0
+  LOAD #1
   ADD
   CALL print
 ```
