@@ -1776,7 +1776,16 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     map_insert(vm->registers, (const char *)(value->data.ptr), v);
   } else {
     // printf("STORE---> %ld\n", v);
-    value->data.ptr = v;
+    /*
+    When loading a reference-type data, the consumer should directly resolve or 
+    access the actual value being referenced, rather than the reference object 
+    itself.
+    */
+    if (v->type == VAL_REF) {
+      value->data.ptr = v->data.ptr;
+    } else {
+      value->data.ptr = v;
+    }
   }
 }
 
