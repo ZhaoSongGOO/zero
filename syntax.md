@@ -4,9 +4,13 @@ program    = { statement | func_define } ;
 
 statement  = var_decl ";" 
            | expr_stmt ";"
-           | ret_stmt ";" ;
+           | ret_stmt ";"
+           | block_stmt
+           | if_stmt ;
            
 ret_stmt = "return" [expression];
+
+if_stmt = "if" "(" expression ")" block_stmt ["else" (if_stmt | block)] 
 
 func_define = "func" string"("[params]")" "{" {statement} "}";
 

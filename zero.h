@@ -28,6 +28,8 @@ typedef enum {
   TOKEN_KEYWORD,
   TOKEN_FUNC,
   TOKEN_RETURN,
+  TOKEN_IF,
+  TOKEN_ELSE,
   TOKEN_EQUAL,         // ==
   TOKEN_NOT_EQUAL,     // !=
   TOKEN_AND,           // &&
@@ -200,7 +202,8 @@ bool is_opcode(char c) {
 bool is_keyword(const char *str) {
   return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
          strcmp(str, "false") == 0 || strcmp(str, "func") == 0 ||
-         strcmp(str, "return") == 0;
+         strcmp(str, "return") == 0 || strcmp(str, "if") == 0 ||
+         strcmp(str, "else") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -230,6 +233,12 @@ struct token scanner_letter(struct scanner *s) {
     }
     if (strcmp(str, "return") == 0) {
       return (struct token){.type = TOKEN_RETURN};
+    }
+    if (strcmp(str, "if") == 0) {
+      return (struct token){.type = TOKEN_IF};
+    }
+    if (strcmp(str, "else") == 0) {
+      return (struct token){.type = TOKEN_ELSE};
     }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
@@ -676,7 +685,7 @@ struct syntax_expr {
 };
 
 struct syntax_statement {
-  enum { STMT_VAR_DECL, STMT_EXPR, STMT_RETURN } type;
+  enum { STMT_VAR_DECL, STMT_EXPR, STMT_RETURN, STMT_IF, STMT_BLOCK } type;
 
   union {
     struct {
@@ -691,6 +700,16 @@ struct syntax_statement {
     struct {
       struct syntax_expr *expr;
     } ret_stmt;
+
+    struct {
+      struct syntax_expr *expression;
+      struct syntax_statement *if_block;
+      struct syntax_statement *else_block;
+    } if_stmt;
+
+    struct {
+      struct Vec *statements;
+    } block_stmt;
   } data;
 };
 
@@ -762,6 +781,8 @@ struct Parser *parser_init(const char *source_name) {
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
 struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_ret_stmt(struct Parser *parser);
+struct syntax_statement *parser_block_statement(struct Parser *parser);
+struct syntax_statement *parser_if_statement(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
 struct syntax_function_define *parser_function_define(struct Parser *parser);
 struct syntax_expr *parser_assignment_expr(struct Parser *parser);
@@ -803,7 +824,6 @@ struct syntax_program *parser_program(struct Parser *parser) {
       module->type = STATEMENT;
       module->data.statement = stmt;
       program->modules->push(program->modules, module);
-      expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
     }
   }
   return program;
@@ -828,7 +848,6 @@ void parser_function_define_statements_helper(struct syntax_function_define *fd,
   while (parser->sc->cur_token.type != TOKEN_RIGHT_BRACE) {
     struct syntax_statement *stmt = parser_statement(parser);
     fd->statements->push(fd->statements, stmt);
-    expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   }
 }
 
@@ -860,7 +879,54 @@ struct syntax_statement *parser_statement(struct Parser *parser) {
   if (cur_token.type == TOKEN_RETURN) {
     return parser_ret_stmt(parser);
   }
+  if (cur_token.type == TOKEN_IF) {
+    return parser_if_statement(parser);
+  }
+  if (cur_token.type == TOKEN_LEFT_BRACE) {
+    return parser_block_statement(parser);
+  }
   return parser_expr_stmt(parser);
+}
+
+struct syntax_statement *parser_if_statement(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_IF);
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_PARENT);
+  struct syntax_expr *expression = parser_expr(parser);
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_PARENT);
+  struct syntax_statement *if_block = parser_block_statement(parser);
+  struct syntax_statement *if_stmt =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  if_stmt->type = STMT_IF;
+  if_stmt->data.if_stmt.if_block = if_block;
+  if_stmt->data.if_stmt.expression = expression;
+  if (parser->sc->cur_token.type == TOKEN_ELSE) {
+    expected_token_type_and_run(parser->sc, TOKEN_ELSE);
+    if (parser->sc->cur_token.type == TOKEN_IF) {
+      if_stmt->data.if_stmt.else_block = parser_if_statement(parser);
+    } else if (parser->sc->cur_token.type == TOKEN_LEFT_BRACE) {
+      if_stmt->data.if_stmt.else_block = parser_block_statement(parser);
+    } else {
+      assert(false);
+    }
+  } else {
+    if_stmt->data.if_stmt.else_block = NULL;
+  }
+  return if_stmt;
+}
+
+struct syntax_statement *parser_block_statement(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
+  struct syntax_statement *b_stmt =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  b_stmt->data.block_stmt.statements = new_vec();
+  b_stmt->type = STMT_BLOCK;
+  while (parser->sc->cur_token.type != TOKEN_RIGHT_BRACE) {
+    struct syntax_statement *st = parser_statement(parser);
+    b_stmt->data.block_stmt.statements->push(b_stmt->data.block_stmt.statements,
+                                             st);
+  }
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
+  return b_stmt;
 }
 
 struct syntax_statement *parser_ret_stmt(struct Parser *parser) {
@@ -870,6 +936,7 @@ struct syntax_statement *parser_ret_stmt(struct Parser *parser) {
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
   statement->type = STMT_RETURN;
   statement->data.ret_stmt.expr = expr;
+  expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
 }
 
@@ -894,6 +961,7 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
     printf("variable(%s) redefine\n", id_name);
     assert(false);
   }
+  expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
 }
 
@@ -902,6 +970,7 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
   statement->type = STMT_EXPR;
   statement->data.expr_stmt.expr = parser_expr(parser);
+  expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
 }
 struct syntax_expr *parser_expr(struct Parser *parser) {
@@ -1215,7 +1284,9 @@ struct syntax_expr *parser_objectlist(struct Parser *parser) {
   return expr;
 }
 
-void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...);
+int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...);
+void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...);
+int INSTRUCTION_COUNT(const char *seg);
 
 // parser visitor functions
 void function_define_visitor(struct syntax_function_define *fd);
@@ -1223,6 +1294,8 @@ void statement_visitor(struct syntax_statement *statment);
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
 void statement_stmt_expr_visitor(struct syntax_statement *statement);
 void statement_stmt_ret_visitor(struct syntax_statement *statement);
+void statement_stmt_if_visitor(struct syntax_statement *statement);
+void statement_stmt_block_visitor(struct syntax_statement *statement);
 void expression_visitor(struct syntax_expr *expr);
 void expression_literal_visitor(struct syntax_expr *expr);
 void expression_binary_visitor(struct syntax_expr *expr);
@@ -1264,9 +1337,34 @@ void statement_visitor(struct syntax_statement *statment) {
     return statement_stmt_expr_visitor(statment);
   case STMT_RETURN:
     return statement_stmt_ret_visitor(statment);
+  case STMT_IF:
+    return statement_stmt_if_visitor(statment);
+  case STMT_BLOCK:
+    return statement_stmt_block_visitor(statment);
   default:
     assert(false);
     break;
+  }
+}
+
+void statement_stmt_if_visitor(struct syntax_statement *statement) {
+  expression_visitor(statement->data.if_stmt.expression);
+  int jump_to_false_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
+  statement_visitor(statement->data.if_stmt.if_block);
+  int jump_to_end_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
+  int count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
+  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_false_index, "JT %d",
+                     count - jump_to_false_index - 1);
+  statement_visitor(statement->data.if_stmt.else_block);
+  count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
+  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_end_index, "JUMP %d",
+                     count - jump_to_end_index - 1);
+}
+
+void statement_stmt_block_visitor(struct syntax_statement *statement) {
+  for (int i = 0; i < statement->data.block_stmt.statements->count; i++) {
+    statement_visitor(statement->data.block_stmt.statements->get(
+        statement->data.block_stmt.statements, i));
   }
 }
 
@@ -1293,7 +1391,7 @@ struct instruction_store *GET_INSTRUCTION_STORE() {
   return __instruction_store;
 }
 
-void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
+void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...) {
   struct instruction_store *gs = GET_INSTRUCTION_STORE();
   va_list args;
   va_start(args, fmt);
@@ -1302,6 +1400,37 @@ void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
 
   if (len < 0)
     return;
+  char *buf = malloc(len + 1);
+  va_start(args, fmt);
+  vsnprintf(buf, len + 1, fmt, args);
+  va_end(args);
+  struct map_pair *pair = map_get(gs->map, seg);
+  if (pair == NULL) {
+    return;
+  }
+  struct str_store *s = (struct str_store *)pair->value;
+  s->get(s, index)->str = buf;
+}
+
+int INSTRUCTION_COUNT(const char *seg) {
+  struct instruction_store *gs = GET_INSTRUCTION_STORE();
+  struct map_pair *pair = map_get(gs->map, seg);
+  if (pair == NULL) {
+    return -1;
+  }
+  struct str_store *s = (struct str_store *)pair->value;
+  return s->count;
+}
+
+int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
+  struct instruction_store *gs = GET_INSTRUCTION_STORE();
+  va_list args;
+  va_start(args, fmt);
+  int len = vsnprintf(NULL, 0, fmt, args);
+  va_end(args);
+
+  if (len < 0)
+    return -1;
   char *buf = malloc(len + 1);
   va_start(args, fmt);
   vsnprintf(buf, len + 1, fmt, args);
@@ -1323,10 +1452,10 @@ void INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
     s->insert_raw = str_store_insert_raw_impl;
     s->insert_raw(s, buf);
     map_insert(gs->map, seg, s);
-    return;
+    return 0;
   }
   struct str_store *s = (struct str_store *)pair->value;
-  s->insert_raw(s, buf);
+  return s->insert_raw(s, buf);
 }
 
 void itf(MapPair *pair, void *) {
@@ -1564,7 +1693,9 @@ typedef enum {
   I_NOT,
   I_NEGATE,
   I_ASSIGN,
-  I_FREE
+  I_FREE,
+  I_JUMP,
+  I_JT, // if stack top is true, jump, else do nothing
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -1655,7 +1786,8 @@ INSTRUCTION *NEW_EQUAL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
-
+INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_JT_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -1679,6 +1811,8 @@ void init_actions() {
   map_insert(actions, "NE", NEW_NOT_EQUAL_INSTRUCTION);
   map_insert(actions, "ASSIGN", NEW_ASSIGN_INSTRUCTION);
   map_insert(actions, "FREE", NEW_FREE_INSTRUCTION);
+  map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
+  map_insert(actions, "JT", NEW_JT_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -1777,8 +1911,8 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
   } else {
     // printf("STORE---> %ld\n", v);
     /*
-    When loading a reference-type data, the consumer should directly resolve or 
-    access the actual value being referenced, rather than the reference object 
+    When loading a reference-type data, the consumer should directly resolve or
+    access the actual value being referenced, rather than the reference object
     itself.
     */
     if (v->type == VAL_REF) {
@@ -2048,6 +2182,31 @@ void call_builtin_function(VM *vm, ZFunction *func) {
   }
 }
 
+bool is_true(VM *vm, ZValue *value) {
+  switch (value->type) {
+  case VAL_BOOL:
+    return value->data.b_val;
+  case VAL_FLOAT:
+    return value->data.f_val;
+  case VAL_INT:
+    return value->data.i_val;
+  default:
+    return is_true(vm, (ZValue *)(value->data.ptr));
+  }
+}
+
+void JUMP_INST_RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_INT);
+  vm->cur_context->pc += value->data.i_val;
+}
+
+void JT_INST_RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_INT);
+  if (!is_true(vm, vm->stacks[vm->sp])) {
+    vm->cur_context->pc += value->data.i_val;
+  }
+}
+
 void CALL_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
@@ -2067,9 +2226,13 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_PUSH:
       PUSH_INST_RUN(vm, (ZValue *)inst->v);
       break;
-    case I_STORE:
+    case I_STORE: {
       STORE_INST_RUN(vm, (ZValue *)inst->v);
-      break;
+      if (inst->v->type == VAL_REGISTER &&
+          strcmp((const char *)(inst->v->data.ptr), "ei") == 0) {
+        func->ctx->pc = code->count;
+      }
+    } break;
     case I_LOAD:
       LOAD_INST_RUN(vm, (ZValue *)inst->v);
       break;
@@ -2105,6 +2268,12 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       break;
     case I_FREE:
       FREE_INST_RUN(vm, inst->v);
+      break;
+    case I_JUMP:
+      JUMP_INST_RUN(vm, inst->v);
+      break;
+    case I_JT:
+      JT_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -2294,6 +2463,20 @@ INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value) {
   v->type = VAL_INT;
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_FREE, v);
+}
+
+INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_INT;
+  v->data.i_val = (int)strtod(value, NULL);
+  return new_inst(I_JUMP, v);
+}
+
+INSTRUCTION *NEW_JT_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_INT;
+  v->data.i_val = (int)strtod(value, NULL);
+  return new_inst(I_JT, v);
 }
 
 #endif

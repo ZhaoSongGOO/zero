@@ -16,6 +16,14 @@ func swap(a, b){
     b = c;
 }
 
+func max(a, b){
+    if(a > b){
+        return a;
+    }else{
+        return b;
+    }
+}
+
 
 func main(){
     var a = 1 + 2 * 3;
