@@ -1579,8 +1579,8 @@ ZFunction *new_function() {
 }
 
 struct zero_vm {
-  ZFunction *global;
-  ZFunction *entry;
+  ZValue *global;
+  ZValue *entry;
   Context *root_context;
   Context *cur_context;
   Map *ready_link;
@@ -2030,6 +2030,7 @@ VM *new_vm() {
   vm->root_context = new_context();
   vm->cur_context = vm->root_context;
   vm->ready_link = new_map();
+  vm->global = NULL;
   vm->sp = -1;
   return vm;
 }
@@ -2042,6 +2043,23 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_STORE, v);
 }
 
+MapPair *get_map_pair_from_context(VM *vm, const char *value) {
+  Context *ctx = vm->cur_context;
+  while (ctx != NULL) {
+    MapPair *pair = map_get(ctx->refs, value);
+    if (pair == NULL) {
+      ctx = ctx->parent;
+    } else {
+      return pair;
+    }
+  }
+  if (vm->global != NULL) {
+    ZFunction *f = (ZFunction *)(vm->global->data.ptr);
+    return map_get(f->ctx->refs, value);
+  }
+  return NULL;
+}
+
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] == '#') {
     int offset = (int)strtod(value + 1, NULL);
@@ -2050,7 +2068,7 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     zv->data.i_val = offset;
     return new_inst(I_LOAD, zv);
   } else {
-    MapPair *pair = map_get(vm->cur_context->refs, value);
+    MapPair *pair = get_map_pair_from_context(vm, value);
     assert(pair != NULL);
     return new_inst(I_LOAD, pair->value);
   }
