@@ -1,4 +1,4 @@
-1. support assign expression
+1. ✅support assign expression
 
 ```js
 var a = 1;
@@ -13,7 +13,7 @@ var c = 5;
 c = a;
 ```
 
-2. support function params LOAD and STORE
+2. ✅support function params LOAD and STORE
 
 ```js
 func add(a, b){
@@ -27,7 +27,7 @@ add:
   CALL print
 ```
 
-3. support global variable LOAD and STORE
+3.✅support global variable LOAD and STORE
 
 ```js
 var a = 1;
