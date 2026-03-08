@@ -95,3 +95,54 @@ func main(){
     stdFunction();
 }
 ```
+
+8. 📌 support access.
+
+```js
+func main(){
+    var a = {"name":"lily"};
+    print(a.name);
+}
+```
+
+9. support access functin type member
+
+```js
+func k(a){
+    print("k");
+    print(a);
+}
+func main(){
+    var a = {"name":"lily", "action": k};
+    a.k(10);
+}
+```
+
+10. 📌 for member functio, support `this` keyword.
+
+```js
+func k(a){
+    print(a);
+    print(this.name);
+}
+func main(){
+    var a = {"name":"lily", "action": k};
+    a.k(10);
+}
+```
+
+11. 📌 recycle include and include twice.
+
+```js
+include("std");
+include("std"); // error!
+// Single-line comment:
+
+/*
+multi-line comment
+*/
+func main(){
+    stdFunction();
+}
+```
+
