@@ -7,9 +7,12 @@ statement  = var_decl ";"
            | ret_stmt ";"
            | block_stmt
            | if_stmt 
-           | while_stmt;
+           | while_stmt
+           | include_stmt ";" ;
            
 ret_stmt = "return" [expression];
+
+include_stmt = "include" "(" string ")"
 
 if_stmt = "if" "(" expression ")" block_stmt ["else" (if_stmt | block)] 
 

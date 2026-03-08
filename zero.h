@@ -31,6 +31,7 @@ typedef enum {
   TOKEN_IF,
   TOKEN_ELSE,
   TOKEN_WHILE,
+  TOKEN_INCLUDE,
   TOKEN_EQUAL,         // ==
   TOKEN_NOT_EQUAL,     // !=
   TOKEN_AND,           // &&
@@ -167,6 +168,23 @@ struct source *read_source(const char *file_path) {
   return src;
 }
 
+char *target_filename(const char *source) {
+  const char *dot = strrchr(source, '.');
+  int base_len;
+
+  if (dot != NULL) {
+    base_len = dot - source;
+  } else {
+    base_len = strlen(source);
+  }
+
+  char *target = malloc(base_len + 4);
+  if (!target)
+    return NULL;
+  snprintf(target, base_len + 4, "%.*s.ir", base_len, source);
+  return target;
+}
+
 void free_source(struct source *source_file) {
   if (source_file->content != NULL) {
     free(source_file->content);
@@ -204,7 +222,8 @@ bool is_keyword(const char *str) {
   return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
          strcmp(str, "false") == 0 || strcmp(str, "func") == 0 ||
          strcmp(str, "return") == 0 || strcmp(str, "if") == 0 ||
-         strcmp(str, "else") == 0 || strcmp(str, "while") == 0;
+         strcmp(str, "else") == 0 || strcmp(str, "while") == 0 ||
+         strcmp(str, "include") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -243,6 +262,10 @@ struct token scanner_letter(struct scanner *s) {
     }
     if (strcmp(str, "while") == 0) {
       return (struct token){.type = TOKEN_WHILE};
+    }
+
+    if (strcmp(str, "include") == 0) {
+      return (struct token){.type = TOKEN_INCLUDE};
     }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
@@ -695,7 +718,8 @@ struct syntax_statement {
     STMT_RETURN,
     STMT_IF,
     STMT_BLOCK,
-    STMT_WHILE
+    STMT_WHILE,
+    STMT_INCLUDE
   } type;
 
   union {
@@ -726,6 +750,10 @@ struct syntax_statement {
       struct syntax_expr *expression;
       struct syntax_statement *while_block;
     } while_stmt;
+
+    struct {
+      const char *include_path;
+    } include_stmt;
   } data;
 };
 
@@ -760,6 +788,7 @@ struct syntax_program {
   // unsigned int count;
   // unsigned int capacity;
   struct Vec *modules;
+  struct Vec *include_paths;
 };
 
 struct parser_scope {
@@ -800,6 +829,7 @@ struct syntax_statement *parser_ret_stmt(struct Parser *parser);
 struct syntax_statement *parser_block_statement(struct Parser *parser);
 struct syntax_statement *parser_if_statement(struct Parser *parser);
 struct syntax_statement *parser_while_statement(struct Parser *parser);
+struct syntax_statement *parser_include_statement(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
 struct syntax_function_define *parser_function_define(struct Parser *parser);
 struct syntax_expr *parser_assignment_expr(struct Parser *parser);
@@ -821,6 +851,7 @@ struct syntax_expr *parser_expr(struct Parser *parser);
 struct syntax_program *parser_program(struct Parser *parser) {
   struct syntax_program *program =
       (struct syntax_program *)malloc(sizeof(struct syntax_program));
+  program->include_paths = new_vec();
   program->modules = new_vec();
   while (parser->sc->cur_token.type != TOKEN_EOF) {
     if (parser->sc->cur_token.type == TOKEN_FUNC) {
@@ -836,6 +867,11 @@ struct syntax_program *parser_program(struct Parser *parser) {
       program->modules->push(program->modules, module);
     } else {
       struct syntax_statement *stmt = parser_statement(parser);
+      if (stmt->type == STMT_INCLUDE) {
+        program->include_paths->push(program->include_paths,
+                                     stmt->data.include_stmt.include_path);
+        continue;
+      }
       struct syntax_top_module *module =
           (struct syntax_top_module *)malloc(sizeof(struct syntax_top_module));
       module->type = STATEMENT;
@@ -884,6 +920,21 @@ struct syntax_function_define *parser_function_define(struct Parser *parser) {
   return fd;
 }
 
+struct syntax_statement *parser_include_statement(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_INCLUDE);
+  struct syntax_statement *include_stmt =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  include_stmt->type = STMT_INCLUDE;
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_PARENT);
+  struct token n = parser->sc->cur_token;
+  expected_token_type_and_run(parser->sc, TOKEN_STRING);
+  include_stmt->data.include_stmt.include_path =
+      parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_PARENT);
+  expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+  return include_stmt;
+}
+
 struct syntax_statement *parser_statement(struct Parser *parser) {
   struct token cur_token = parser->sc->cur_token;
   if (cur_token.type == TOKEN_KEYWORD &&
@@ -904,6 +955,9 @@ struct syntax_statement *parser_statement(struct Parser *parser) {
   }
   if (cur_token.type == TOKEN_WHILE) {
     return parser_while_statement(parser);
+  }
+  if (cur_token.type == TOKEN_INCLUDE) {
+    return parser_include_statement(parser);
   }
   return parser_expr_stmt(parser);
 }
@@ -1456,18 +1510,58 @@ void statement_stmt_ret_visitor(struct syntax_statement *statement) {
 struct instruction_store {
   int fd;
   Map *map;
+  struct Vec *childs;
+  struct instruction_store *parent;
+  struct str_store *static_func;
 };
 
-struct instruction_store *__instruction_store = NULL;
+struct instruction_store *root_instruction_store = NULL;
+
+struct instruction_store *cur_instruction_store = NULL;
 
 struct instruction_store *GET_INSTRUCTION_STORE() {
-  if (__instruction_store == NULL) {
-    __instruction_store =
-        (struct instruction_store *)malloc(sizeof(struct instruction_store));
-    __instruction_store->fd = -1;
-    __instruction_store->map = new_map();
-  }
-  return __instruction_store;
+  // if (__instruction_store == NULL) {
+  //   __instruction_store =
+  //       (struct instruction_store *)malloc(sizeof(struct instruction_store));
+  //   __instruction_store->fd = -1;
+  //   __instruction_store->map = new_map();
+  // }
+  return cur_instruction_store;
+}
+
+struct instruction_store *new_instruction_store() {
+  struct instruction_store *inst_store =
+      (struct instruction_store *)malloc(sizeof(struct instruction_store));
+  inst_store->fd = -1;
+  inst_store->map = new_map();
+  inst_store->childs = new_vec();
+  inst_store->parent = NULL;
+  struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
+  s->count = 0;
+  s->head = NULL;
+  s->tail = NULL;
+  s->get = str_store_get_impl;
+  s->insert = str_store_insert_impl;
+  s->insert_raw = str_store_insert_raw_impl;
+  inst_store->static_func = s;
+  return inst_store;
+}
+
+void ROOT_INSTRUCTION_INIT() {
+  root_instruction_store =
+      (struct instruction_store *)malloc(sizeof(struct instruction_store));
+  root_instruction_store->fd = -1;
+  root_instruction_store->map = new_map();
+  root_instruction_store->childs = new_vec();
+  root_instruction_store->parent = NULL;
+  struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
+  s->count = 0;
+  s->head = NULL;
+  s->tail = NULL;
+  s->get = str_store_get_impl;
+  s->insert = str_store_insert_impl;
+  s->insert_raw = str_store_insert_raw_impl;
+  root_instruction_store->static_func = s;
 }
 
 void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...) {
@@ -1483,22 +1577,30 @@ void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...) {
   va_start(args, fmt);
   vsnprintf(buf, len + 1, fmt, args);
   va_end(args);
-  struct map_pair *pair = map_get(gs->map, seg);
-  if (pair == NULL) {
-    return;
+  if (strcmp(seg, "_static") == 0) {
+    gs->static_func->get(gs->static_func, index)->str = buf;
+  } else {
+    struct map_pair *pair = map_get(gs->map, seg);
+    if (pair == NULL) {
+      return;
+    }
+    struct str_store *s = (struct str_store *)pair->value;
+    s->get(s, index)->str = buf;
   }
-  struct str_store *s = (struct str_store *)pair->value;
-  s->get(s, index)->str = buf;
 }
 
 int INSTRUCTION_COUNT(const char *seg) {
   struct instruction_store *gs = GET_INSTRUCTION_STORE();
-  struct map_pair *pair = map_get(gs->map, seg);
-  if (pair == NULL) {
-    return -1;
+  if (strcmp(seg, "_static") == 0) {
+    return gs->static_func->count;
+  } else {
+    struct map_pair *pair = map_get(gs->map, seg);
+    if (pair == NULL) {
+      return -1;
+    }
+    struct str_store *s = (struct str_store *)pair->value;
+    return s->count;
   }
-  struct str_store *s = (struct str_store *)pair->value;
-  return s->count;
 }
 
 int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
@@ -1523,21 +1625,26 @@ int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   //     write(gs->fd, "\n", 1);
   //   }
   // }
-  struct map_pair *pair = map_get(gs->map, seg);
-  if (pair == NULL) {
-    struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
-    s->count = 0;
-    s->head = NULL;
-    s->tail = NULL;
-    s->get = str_store_get_impl;
-    s->insert = str_store_insert_impl;
-    s->insert_raw = str_store_insert_raw_impl;
-    s->insert_raw(s, buf);
-    map_insert(gs->map, seg, s);
-    return 0;
+  if (strcmp(seg, "_static") == 0) {
+    gs->static_func->insert_raw(gs->static_func, buf);
+  } else {
+    struct map_pair *pair = map_get(gs->map, seg);
+    if (pair == NULL) {
+      struct str_store *s =
+          (struct str_store *)malloc(sizeof(struct str_store));
+      s->count = 0;
+      s->head = NULL;
+      s->tail = NULL;
+      s->get = str_store_get_impl;
+      s->insert = str_store_insert_impl;
+      s->insert_raw = str_store_insert_raw_impl;
+      s->insert_raw(s, buf);
+      map_insert(gs->map, seg, s);
+      return 0;
+    }
+    struct str_store *s = (struct str_store *)pair->value;
+    return s->insert_raw(s, buf);
   }
-  struct str_store *s = (struct str_store *)pair->value;
-  return s->insert_raw(s, buf);
 }
 
 void itf(MapPair *pair, void *) {
@@ -1832,7 +1939,7 @@ ZFunction *new_function() {
 }
 
 struct zero_vm {
-  ZValue *global;
+  struct Vec *globals;
   ZValue *entry;
   Context *root_context;
   Context *cur_context;
@@ -1923,10 +2030,17 @@ const Map *GET_ACTIONS() {
   return actions;
 }
 
+Context *current_global_ctx = NULL;
+
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   ZFunction *f = new_function();
-  f->ctx->parent = vm->cur_context;
+  if (strcmp(pair->key, "_static") != 0) {
+    f->ctx->parent = current_global_ctx;
+  } else {
+    f->ctx->parent = vm->cur_context;
+    current_global_ctx = f->ctx;
+  }
   vm->cur_context = f->ctx;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
@@ -1943,18 +2057,33 @@ void list_inst_store(MapPair *pair, void *data) {
   ZValue *value = (ZValue *)malloc(sizeof(ZValue));
   value->type = VAL_FUNC;
   value->data.ptr = f;
-  if (strcmp(pair->key, "main") == 0) {
-    vm->entry = value;
-  }
+
   if (strcmp(pair->key, "_static") == 0) {
-    vm->global = value;
+    vm->globals->push(vm->globals, value);
+  } else {
+    if (strcmp(pair->key, "main") == 0) {
+      vm->entry = value;
+    }
+    map_insert(vm->root_context->symbols, pair->key, value);
   }
-  map_insert(vm->root_context->symbols, pair->key, value);
+
   vm->cur_context = f->ctx->parent;
 }
 
+void vm_compile_stage_kernel(VM *vm, struct instruction_store *store) {
+  if (store == NULL) {
+    return;
+  }
+  for (int i = 0; i < store->childs->count; i++) {
+    vm_compile_stage_kernel(vm, store->childs->get(store->childs, i));
+  }
+  MapPair pair = (MapPair){.key = "_static", .value = store->static_func};
+  list_inst_store(&pair, vm);
+  map_foreach(store->map, list_inst_store, vm);
+}
+
 void vm_compile_stage(VM *vm) {
-  map_foreach(GET_INSTRUCTION_STORE()->map, list_inst_store, vm);
+  vm_compile_stage_kernel(vm, root_instruction_store);
 }
 
 void vm_link_progress(MapPair *pair, void *data) {
@@ -2372,8 +2501,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
 }
 
 int VM_Run(VM *vm) {
-  if (vm->global != NULL) {
-    CALL_INST_RUN(vm, vm->global);
+  for (int i = vm->globals->count - 1; i >= 0; i--) {
+    CALL_INST_RUN(vm, vm->globals->get(vm->globals, i));
   }
   CALL_INST_RUN(vm, vm->entry);
 }
@@ -2384,7 +2513,7 @@ VM *new_vm() {
   vm->root_context = new_context();
   vm->cur_context = vm->root_context;
   vm->ready_link = new_map();
-  vm->global = NULL;
+  vm->globals = new_vec();
   vm->sp = -1;
   vm->registers = new_map();
   map_insert(vm->registers, "ei", NULL);
@@ -2406,6 +2535,11 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
   } else {
     ZValue *v = (ZValue *)malloc(sizeof(ZValue));
     v->type = VAL_REF;
+    MapPair *p = map_get(vm->cur_context->refs, value);
+    if (p != NULL) {
+      printf("variable(%s) redefine\n", value);
+      assert(false);
+    }
     map_insert(vm->cur_context->refs, value, v);
     v->data.ptr = value;
     return new_inst(I_STORE, v);
@@ -2422,10 +2556,10 @@ MapPair *get_map_pair_from_context(VM *vm, const char *value) {
       return pair;
     }
   }
-  if (vm->global != NULL) {
-    ZFunction *f = (ZFunction *)(vm->global->data.ptr);
-    return map_get(f->ctx->refs, value);
-  }
+  // if (vm->global != NULL) {
+  //   ZFunction *f = (ZFunction *)(vm->global->data.ptr);
+  //   return map_get(f->ctx->refs, value);
+  // }
   return NULL;
 }
 
@@ -2559,6 +2693,44 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
   v->type = VAL_INT;
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_JF, v);
+}
+
+const char *append_suffix(const char *m) {
+  int len = strlen(m);
+  char *source_file_name = (char *)malloc(sizeof(char) * (len + 3));
+  memcpy(source_file_name, m, len);
+  source_file_name[len] = '.';
+  source_file_name[len + 1] = 'z';
+  source_file_name[len + 2] = '\0';
+  return source_file_name;
+}
+
+void compile(const char *file_name) {
+  struct instruction_store *st = NULL;
+  if (root_instruction_store == NULL) {
+    ROOT_INSTRUCTION_INIT();
+    cur_instruction_store = root_instruction_store;
+  } else {
+    st = new_instruction_store();
+    st->parent = cur_instruction_store;
+    cur_instruction_store->childs->push(cur_instruction_store->childs, st);
+    cur_instruction_store = st;
+  }
+  struct Parser *parser = parser_init(file_name);
+  struct syntax_program *program = parser_program(parser);
+  GET_INSTRUCTION_STORE()->fd =
+      open(target_filename(file_name), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  program_visitor(program);
+  instruction_to_file();
+  for (int i = 0; i < program->include_paths->count; i++) {
+    compile(
+        append_suffix(program->include_paths->get(program->include_paths, i)));
+    if (st == NULL) {
+      cur_instruction_store = root_instruction_store;
+    } else {
+      cur_instruction_store = st->parent;
+    }
+  }
 }
 
 #endif

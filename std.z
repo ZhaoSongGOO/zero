@@ -1,0 +1,17 @@
+func swap(a, b){
+    var c = a;
+    a = b;
+    b = c;
+}
+
+func max(a, b){
+    if(a > b){
+        return a;
+    }else{
+        return b;
+    }
+}
+
+func add(a, b){
+    return a + b;
+}
