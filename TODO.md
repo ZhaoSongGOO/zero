@@ -81,7 +81,7 @@ func main(){
 }
 ```
 
-7. 📌 support comment
+7. ✅ support comment
 
 ```js
 include("std");
