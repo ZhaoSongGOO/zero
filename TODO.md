@@ -73,9 +73,24 @@ while(a < 100){
 
 6. ✅ support include 
 
-```
+```js
 include("std");
 
+func main(){
+    stdFunction();
+}
+```
+
+7. 📌 support comment
+
+```js
+include("std");
+
+// Single-line comment:
+
+/*
+multi-line comment
+*/
 func main(){
     stdFunction();
 }
