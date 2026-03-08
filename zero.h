@@ -30,6 +30,7 @@ typedef enum {
   TOKEN_RETURN,
   TOKEN_IF,
   TOKEN_ELSE,
+  TOKEN_WHILE,
   TOKEN_EQUAL,         // ==
   TOKEN_NOT_EQUAL,     // !=
   TOKEN_AND,           // &&
@@ -203,7 +204,7 @@ bool is_keyword(const char *str) {
   return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
          strcmp(str, "false") == 0 || strcmp(str, "func") == 0 ||
          strcmp(str, "return") == 0 || strcmp(str, "if") == 0 ||
-         strcmp(str, "else") == 0;
+         strcmp(str, "else") == 0 || strcmp(str, "while") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -239,6 +240,9 @@ struct token scanner_letter(struct scanner *s) {
     }
     if (strcmp(str, "else") == 0) {
       return (struct token){.type = TOKEN_ELSE};
+    }
+    if (strcmp(str, "while") == 0) {
+      return (struct token){.type = TOKEN_WHILE};
     }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
@@ -685,7 +689,14 @@ struct syntax_expr {
 };
 
 struct syntax_statement {
-  enum { STMT_VAR_DECL, STMT_EXPR, STMT_RETURN, STMT_IF, STMT_BLOCK } type;
+  enum {
+    STMT_VAR_DECL,
+    STMT_EXPR,
+    STMT_RETURN,
+    STMT_IF,
+    STMT_BLOCK,
+    STMT_WHILE
+  } type;
 
   union {
     struct {
@@ -710,6 +721,11 @@ struct syntax_statement {
     struct {
       struct Vec *statements;
     } block_stmt;
+
+    struct {
+      struct syntax_expr *expression;
+      struct syntax_statement *while_block;
+    } while_stmt;
   } data;
 };
 
@@ -783,6 +799,7 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser);
 struct syntax_statement *parser_ret_stmt(struct Parser *parser);
 struct syntax_statement *parser_block_statement(struct Parser *parser);
 struct syntax_statement *parser_if_statement(struct Parser *parser);
+struct syntax_statement *parser_while_statement(struct Parser *parser);
 struct syntax_statement *parser_statement(struct Parser *parser);
 struct syntax_function_define *parser_function_define(struct Parser *parser);
 struct syntax_expr *parser_assignment_expr(struct Parser *parser);
@@ -885,7 +902,25 @@ struct syntax_statement *parser_statement(struct Parser *parser) {
   if (cur_token.type == TOKEN_LEFT_BRACE) {
     return parser_block_statement(parser);
   }
+  if (cur_token.type == TOKEN_WHILE) {
+    return parser_while_statement(parser);
+  }
   return parser_expr_stmt(parser);
+}
+
+struct syntax_statement *parser_while_statement(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_WHILE);
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_PARENT);
+  struct syntax_expr *expression = parser_expr(parser);
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_PARENT);
+  struct syntax_statement *while_block = parser_block_statement(parser);
+
+  struct syntax_statement *while_stmt =
+      (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
+  while_stmt->type = STMT_WHILE;
+  while_stmt->data.while_stmt.expression = expression;
+  while_stmt->data.while_stmt.while_block = while_block;
+  return while_stmt;
 }
 
 struct syntax_statement *parser_if_statement(struct Parser *parser) {
@@ -1295,6 +1330,7 @@ void statement_stmt_var_decl_visitor(struct syntax_statement *statement);
 void statement_stmt_expr_visitor(struct syntax_statement *statement);
 void statement_stmt_ret_visitor(struct syntax_statement *statement);
 void statement_stmt_if_visitor(struct syntax_statement *statement);
+void statement_stmt_while_visitor(struct syntax_statement *statement);
 void statement_stmt_block_visitor(struct syntax_statement *statement);
 void expression_visitor(struct syntax_expr *expr);
 void expression_literal_visitor(struct syntax_expr *expr);
@@ -1341,19 +1377,57 @@ void statement_visitor(struct syntax_statement *statment) {
     return statement_stmt_if_visitor(statment);
   case STMT_BLOCK:
     return statement_stmt_block_visitor(statment);
+  case STMT_WHILE:
+    return statement_stmt_while_visitor(statment);
   default:
     assert(false);
     break;
   }
 }
 
+/*
+      [4] ... <--------------------------------|
+      [5] ... enter while                      |
+      [6] ...                                  |
+------[7] exit_loop_index 4 (11 - 7)           |
+|     [8] ...                                  |
+|     [9] ...                                  |
+|     [10] ...                                 |
+|---->[11] return_loop_index -7 (4 - 11)--------
+*/
+void statement_stmt_while_visitor(struct syntax_statement *statement) {
+  int count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
+  expression_visitor(statement->data.while_stmt.expression);
+  int exit_loop_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, NULL);
+  statement_visitor(statement->data.while_stmt.while_block);
+  int return_loop_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, NULL);
+  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, exit_loop_index, "JF %d",
+                     return_loop_index - exit_loop_index);
+  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, return_loop_index, "JUMP %d",
+                     count - return_loop_index);
+}
+
+/*
+      [4] ...
+      [5] ... if
+      [6] ...
+------[7] jump_to_false 4 (11 - 7)
+|     [8] ...
+|     [9] ...
+|     [10] exit ------------
+|---->[11] else            |
+      [12]                 |
+      [13]                 |
+      [14]<----------------|
+      [15]
+*/
 void statement_stmt_if_visitor(struct syntax_statement *statement) {
   expression_visitor(statement->data.if_stmt.expression);
-  int jump_to_false_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
+  int jump_to_false_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, NULL);
   statement_visitor(statement->data.if_stmt.if_block);
   int jump_to_end_index;
   if (statement->data.if_stmt.else_block != NULL) {
-    jump_to_end_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
+    jump_to_end_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, NULL);
   }
   int count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
   INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_false_index, "JF %d",
@@ -1429,17 +1503,20 @@ int INSTRUCTION_COUNT(const char *seg) {
 
 int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   struct instruction_store *gs = GET_INSTRUCTION_STORE();
-  va_list args;
-  va_start(args, fmt);
-  int len = vsnprintf(NULL, 0, fmt, args);
-  va_end(args);
+  char *buf = NULL;
+  if (fmt != NULL) {
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
 
-  if (len < 0)
-    return -1;
-  char *buf = malloc(len + 1);
-  va_start(args, fmt);
-  vsnprintf(buf, len + 1, fmt, args);
-  va_end(args);
+    if (len < 0)
+      return -1;
+    buf = malloc(len + 1);
+    va_start(args, fmt);
+    vsnprintf(buf, len + 1, fmt, args);
+    va_end(args);
+  }
   // if (gs->fd != -1) {
   //   if (len > 0) {
   //     write(gs->fd, buf, len);

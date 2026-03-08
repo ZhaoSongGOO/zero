@@ -6,11 +6,14 @@ statement  = var_decl ";"
            | expr_stmt ";"
            | ret_stmt ";"
            | block_stmt
-           | if_stmt ;
+           | if_stmt 
+           | while_stmt;
            
 ret_stmt = "return" [expression];
 
 if_stmt = "if" "(" expression ")" block_stmt ["else" (if_stmt | block)] 
+
+while_stmt = "while" "(" expression ")" block_stmt;
 
 func_define = "func" string"("[params]")" "{" {statement} "}";
 
