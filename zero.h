@@ -706,7 +706,8 @@ struct syntax_expr {
     EXPR_CALL,
     EXPR_ARRAY,
     EXPR_OBJECT,
-    EXPR_ID
+    EXPR_ID,
+    EXPR_ACCESS
   } type;
 
   union {
@@ -717,10 +718,13 @@ struct syntax_expr {
     } binary_expr;
 
     struct {
+      bool source_in_stack;
       char *func_name;
+      struct syntax_expr *source;
       // struct syntax_expr **args;
       // uint8_t arg_count;
       struct Vec *args;
+
     } call_expr;
 
     struct {
@@ -740,6 +744,11 @@ struct syntax_expr {
       int offset;
       char *name;
     } identifier_expr;
+
+    struct {
+      struct syntax_expr *obj;
+      const char *prop;
+    } access_expr;
 
     struct {
       enum { LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL } kind;
@@ -1340,6 +1349,19 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
       id->data.identifier_expr.from_params = true;
       id->data.identifier_expr.offset = (int)variable_define_from_params->value;
     }
+    if (parser->sc->cur_token.type == TOKEN_ACCESS) {
+      expected_token_type_and_run(parser->sc, TOKEN_ACCESS);
+      struct syntax_expr *access_expr =
+          (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+      access_expr->type = EXPR_ACCESS;
+      struct token n = parser->sc->cur_token;
+      expected_token_type_and_run(parser->sc, TOKEN_ID);
+      access_expr->data.access_expr.prop =
+          parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)
+              ->str;
+      access_expr->data.access_expr.obj = id;
+      return access_expr;
+    }
     return id;
   }
   case TOKEN_LEFT_BRACKET: // [
@@ -1369,7 +1391,13 @@ struct syntax_expr *parser_call(struct syntax_expr *caller,
   struct syntax_expr *call =
       (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
   call->type = EXPR_CALL;
-  call->data.call_expr.func_name = caller->data.identifier_expr.name;
+  call->data.call_expr.source_in_stack = false;
+  if (caller->type == EXPR_ID) {
+    call->data.call_expr.func_name = caller->data.identifier_expr.name;
+  } else if (caller->type == EXPR_ACCESS) {
+    call->data.call_expr.source_in_stack = true;
+    call->data.call_expr.source = caller;
+  }
   call->data.call_expr.args = args;
   return call;
 }
@@ -1435,6 +1463,7 @@ void expression_binary_visitor(struct syntax_expr *expr);
 void expression_unary_visitor(struct syntax_expr *expr);
 void expression_array_visitor(struct syntax_expr *expr);
 void expression_object_visitor(struct syntax_expr *expr);
+void expression_access_visitor(struct syntax_expr *expr);
 void expression_call_visitor(struct syntax_expr *expr);
 void program_visitor(struct syntax_program *program);
 
@@ -1747,9 +1776,22 @@ void expression_visitor(struct syntax_expr *expr) {
   case EXPR_OBJECT:
     expression_object_visitor(expr);
     break;
+  case EXPR_ACCESS:
+    expression_access_visitor(expr);
+    break;
   default:
     assert(false);
   }
+}
+
+void expression_access_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_ACCESS);
+  expression_visitor(expr->data.access_expr.obj);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s",
+                   expr->data.access_expr.prop);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ACCESS");
+  // TODO: support pass this ptr, may be use.
+  // expression_visitor(expr->data.access_expr.obj);
 }
 
 // LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL
@@ -1835,16 +1877,42 @@ void expression_unary_visitor(struct syntax_expr *expr) {
   }
 }
 
+/*
+a.name(1, 2)
+
+    [0]...
+    [1] a.name <----|
+    [2] 2           |
+    [3] 1           |__ call -2
+    [4]
+    [5]
+    [6]
+*/
 void expression_call_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_CALL);
+  if (expr->data.call_expr.source_in_stack) {
+    expression_visitor(expr->data.call_expr.source);
+  }
+
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
   }
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL %s",
-                   expr->data.call_expr.func_name);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
-                   expr->data.call_expr.args->count);
+  if (expr->data.call_expr.source_in_stack) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
+                     expr->data.call_expr.args->count);
+  } else {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL %s",
+                     expr->data.call_expr.func_name);
+  }
+  if (expr->data.call_expr.source_in_stack) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
+                     expr->data.call_expr.args->count + 1);
+  } else {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
+                     expr->data.call_expr.args->count);
+  }
+
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
 
@@ -1928,6 +1996,7 @@ typedef enum {
   I_FREE,
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
+  I_ACCESS
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2020,6 +2089,7 @@ INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2045,6 +2115,7 @@ void init_actions() {
   map_insert(actions, "FREE", NEW_FREE_INSTRUCTION);
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
+  map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2552,7 +2623,30 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
+void ACCESS_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *obj_ref = vm->stacks[vm->sp - 1];
+  ZValue *prop = vm->stacks[vm->sp];
+  assert(obj_ref->type == VAL_REF);
+  assert(prop->type = VAL_STR_INDEX);
+  ZValue *obj = (ZValue *)obj_ref->data.ptr;
+  assert(obj->type == VAL_OBJ_PTR);
+  ZObject *raw_obj = (ZObject *)(obj->data.ptr);
+  const char *key = vm->root_context->cvalues->get(vm->root_context->cvalues,
+                                                   prop->data.i_val);
+  for (int i = 0; i < raw_obj->count; i++) {
+    if (strcmp(raw_obj->entries[i].key, key) == 0) {
+      vm->stacks[--(vm->sp)] = &(raw_obj->entries[i].value);
+      return;
+    }
+  }
+  assert(false);
+}
+
 void CALL_INST_RUN(VM *vm, ZValue *value) {
+  // call from stack, eg: CALL -1
+  if (value->type == VAL_INT) {
+    value = vm->stacks[vm->sp + value->data.i_val];
+  }
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
   func->ctx->pc = 0;
@@ -2598,6 +2692,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       CALL_INST_RUN(vm, (ZValue *)inst->v);
       vm->cur_context = func->ctx;
     } break;
+    case I_ACCESS:
+      ACCESS_INST_RUN(vm, inst->v);
+      break;
     case I_G:
     case I_GE:
     case I_L:
@@ -2752,19 +2849,26 @@ INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
 }
 
 INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_FUNC;
-  INSTRUCTION *inst = new_inst(I_CALL, v);
-  MapPair *pair = map_get(vm->ready_link, value);
-  if (pair == NULL) {
-    struct Vec *store = new_vec();
+  if (value[0] != '-') {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = VAL_FUNC;
+    INSTRUCTION *inst = new_inst(I_CALL, v);
+    MapPair *pair = map_get(vm->ready_link, value);
+    if (pair == NULL) {
+      struct Vec *store = new_vec();
+      store->push(store, inst);
+      map_insert(vm->ready_link, value, store);
+      return inst;
+    }
+    struct Vec *store = pair->value;
     store->push(store, inst);
-    map_insert(vm->ready_link, value, store);
     return inst;
+  } else {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = VAL_INT;
+    v->data.i_val = (int)strtod(value, NULL);
+    return new_inst(I_CALL, v);
   }
-  struct Vec *store = pair->value;
-  store->push(store, inst);
-  return inst;
 }
 INSTRUCTION *NEW_ADD_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_ADD, NULL);
@@ -2827,6 +2931,10 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
   v->type = VAL_INT;
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_JF, v);
+}
+
+INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_ACCESS, NULL);
 }
 
 const char *append_suffix(const char *m) {

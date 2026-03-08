@@ -60,5 +60,6 @@ func main(){
     loop(99, 2);
 
     var d = { "key": 1, "address": "abc"};
-    print(d);
+    print(d.key);
+    print(d.address);
 }

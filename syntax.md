@@ -55,7 +55,7 @@ factor     = [ "!" | "-" ] primary_call ;
 # level 8
 primary_call = primary { "(" [ arg_list ] ")" };
 
-primary    = identifier | number | string | bool |array_list | object_list | "(" expression ")" ;
+primary    = identifier {"." string} | number | string | bool |array_list | object_list | "(" expression ")" ;
 
 arg_list   = expression { "," expression } ;
 
