@@ -12,6 +12,11 @@ func loop(a, b){
     }
 }
 
+// This is main Function
+
+/*
+ This is main Function
+*/
 func main(){
     var a = 1 + 2 * 3;
     var b = (a + 2) * 3;

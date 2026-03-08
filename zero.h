@@ -330,6 +330,44 @@ struct token scanner_string(struct scanner *s) {
   return (struct token){.type = TOKEN_STRING, .value = {.symbol_index = si}};
 }
 
+void single_comment_consumer(struct scanner *s) {
+  int first = s->index + 2;
+  while (first < s->source->size) {
+    if (s->source->content[first] == '\n') {
+      s->index = first + 1;
+      return;
+    }
+    first += 1;
+  }
+}
+
+void multi_comment_consumer(struct scanner *s) {
+  int first = s->index + 2;
+  int second = first + 1;
+  while (first < s->source->size && second < s->source->size) {
+    if (s->source->content[first] == '*' && s->source->content[second] == '/') {
+      s->index = second + 1;
+      return;
+    }
+    first += 1;
+    second = first + 1;
+  }
+  assert(false);
+}
+
+void comment_consumer(struct scanner *s) {
+  int first = s->index;
+  int second = s->index + 1;
+  if (first >= s->source->size || second >= s->source->size) {
+    assert(false);
+  }
+  if (s->source->content[second] == '/') {
+    single_comment_consumer(s);
+  } else if (s->source->content[second] == '*') {
+    multi_comment_consumer(s);
+  }
+}
+
 struct token scanner_opcode(struct scanner *s) {
   struct token t = {.type = TOKEN_UNKNOWN};
   char next = s->source->content[s->index + 1];
@@ -343,9 +381,14 @@ struct token scanner_opcode(struct scanner *s) {
   case '*':
     t = (struct token){.type = TOKEN_MULTI};
     break;
-  case '/':
-    t = (struct token){.type = TOKEN_DIV};
-    break;
+  case '/': {
+    if (next == '/' || next == '*') {
+      comment_consumer(s);
+      return next_token(s);
+    } else {
+      t = (struct token){.type = TOKEN_DIV};
+    }
+  } break;
   case '(':
     t = (struct token){.type = TOKEN_LEFT_PARENT};
     break;
