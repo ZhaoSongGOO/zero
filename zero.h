@@ -2439,6 +2439,18 @@ void print_arr(VM *vm, ZArray *arr) {
   printf("]");
 }
 
+void print_object(VM *vm, ZObject *obj) {
+  printf("{");
+  for (int i = 0; i < obj->count; i++) {
+    printf("\"%s\":", obj->entries[i].key);
+    print_data(vm, &(obj->entries[i].value));
+    if (i != obj->count - 1) {
+      printf(", ");
+    }
+  }
+  printf("}");
+}
+
 void print_ref(VM *vm, ZValue *v) {
   assert(v->type == VAL_REF);
   ZValue *d = (ZValue *)(v->data.ptr);
@@ -2447,7 +2459,7 @@ void print_ref(VM *vm, ZValue *v) {
     print_arr(vm, (ZArray *)d->data.ptr);
     break;
   case VAL_OBJ_PTR:
-    printf("TODO: print object\n");
+    print_object(vm, (ZObject *)d->data.ptr);
     break;
   default:
     print_data(vm, d);
@@ -2479,14 +2491,39 @@ void new_array(VM *vm) {
   vm->stacks[vm->sp] = data;
 }
 
+void new_object(VM *vm) {
+  ZValue *count = vm->stacks[vm->sp--];
+  assert(count->type == VAL_INT);
+  ZValue *data = (ZValue *)malloc(sizeof(ZValue));
+  data->type = VAL_OBJ_PTR;
+  ZObject *arr = (ZObject *)malloc(sizeof(ZObject));
+  arr->count = count->data.i_val;
+  arr->entries = (ZPair *)malloc(sizeof(ZPair) * arr->count);
+  for (int i = 0; i < arr->count; i++) {
+    int stack_base = vm->sp - arr->count * 2;
+    ZValue *key = vm->stacks[stack_base + i * 2 + 1];
+    assert(key->type == VAL_STR_INDEX);
+    ZValue *value = vm->stacks[stack_base + i * 2 + 2];
+    arr->entries[i].key = vm->root_context->cvalues->get(
+        vm->root_context->cvalues, key->data.i_val);
+    arr->entries[i].value.type = value->type;
+    arr->entries[i].value.data = value->data;
+  }
+  data->data.ptr = arr;
+  vm->sp -= arr->count * 2 - 1;
+  vm->stacks[vm->sp] = data;
+}
+
 void call_builtin_function(VM *vm, ZFunction *func) {
   assert(func->is_builtin);
   if (strcmp(func->name, "print") == 0) {
     print(vm);
   } else if (strcmp(func->name, "NEW_ARRAY") == 0) {
     new_array(vm);
+  } else if (strcmp(func->name, "NEW_OBJECT") == 0) {
+    new_object(vm);
   } else {
-    printf("Call builtin function(%s)\n", func->name);
+    assert(false);
   }
 }
 

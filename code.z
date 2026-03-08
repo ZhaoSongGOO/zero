@@ -25,7 +25,6 @@ func main(){
     var c = [1.3, 2, 3, a];
 
     print(c);
-    var d = { "key": 1, "address": "abc"};
 
     var e = false;
 
@@ -59,4 +58,7 @@ func main(){
     print(i*1);
     print(l*1);
     loop(99, 2);
+
+    var d = { "key": 1, "address": "abc"};
+    print(d);
 }
