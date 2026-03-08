@@ -1892,10 +1892,10 @@ typedef struct {
   } data;
 } ZValue;
 
-struct ZArray {
+typedef struct {
   int length;
   ZValue *elements;
-};
+} ZArray;
 
 typedef struct {
   const char *key;
@@ -2399,38 +2399,92 @@ void FREE_INST_RUN(VM *vm, ZValue *value) {
   vm->sp -= free_size;
 }
 
-void print(VM *vm) {
-  ZValue *v = vm->stacks[vm->sp];
+void print_ref(VM *vm, ZValue *v);
+
+void print_data(VM *vm, ZValue *v) {
   switch (v->type) {
   case VAL_INT:
-    printf("%d\n", v->data.i_val);
+    printf("%d", v->data.i_val);
     break;
   case VAL_FLOAT:
-    printf("%ld\n", v->data.f_val);
+    printf("%f", v->data.f_val);
     break;
   case VAL_STR_INDEX: {
-    printf("%s\n", vm->root_context->cvalues->get(vm->root_context->cvalues,
-                                                  v->data.i_val));
+    printf("%s", vm->root_context->cvalues->get(vm->root_context->cvalues,
+                                                v->data.i_val));
   } break;
   case VAL_BOOL: {
     if (v->data.b_val) {
-      printf("true\n");
+      printf("true");
     } else {
-      printf("false\n");
+      printf("false");
     }
   } break;
   case VAL_REF:
-    printf("Ref(%ld)\n", v);
+    print_ref(vm, v);
     break;
   default:
     break;
   }
 }
 
+void print_arr(VM *vm, ZArray *arr) {
+  printf("[");
+  for (int i = 0; i < arr->length; i++) {
+    print_data(vm, arr->elements + i);
+    if (i != arr->length - 1) {
+      printf(", ");
+    }
+  }
+  printf("]");
+}
+
+void print_ref(VM *vm, ZValue *v) {
+  assert(v->type == VAL_REF);
+  ZValue *d = (ZValue *)(v->data.ptr);
+  switch (d->type) {
+  case VAL_ARR_PTR:
+    print_arr(vm, (ZArray *)d->data.ptr);
+    break;
+  case VAL_OBJ_PTR:
+    printf("TODO: print object\n");
+    break;
+  default:
+    print_data(vm, d);
+    break;
+  }
+}
+
+void print(VM *vm) {
+  ZValue *v = vm->stacks[vm->sp];
+  print_data(vm, v);
+  printf("\n");
+}
+
+void new_array(VM *vm) {
+  ZValue *count = vm->stacks[vm->sp--];
+  assert(count->type == VAL_INT);
+  ZValue *data = (ZValue *)malloc(sizeof(ZValue));
+  data->type = VAL_ARR_PTR;
+  ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
+  arr->length = count->data.i_val;
+  arr->elements = (ZValue *)malloc(sizeof(ZValue) * arr->length);
+  for (int i = 0; i < arr->length; i++) {
+    ZValue *src = vm->stacks[vm->sp - arr->length + 1 + i];
+    arr->elements[i].type = src->type;
+    arr->elements[i].data = src->data;
+  }
+  data->data.ptr = arr;
+  vm->sp -= arr->length - 1;
+  vm->stacks[vm->sp] = data;
+}
+
 void call_builtin_function(VM *vm, ZFunction *func) {
   assert(func->is_builtin);
   if (strcmp(func->name, "print") == 0) {
     print(vm);
+  } else if (strcmp(func->name, "NEW_ARRAY") == 0) {
+    new_array(vm);
   } else {
     printf("Call builtin function(%s)\n", func->name);
   }
