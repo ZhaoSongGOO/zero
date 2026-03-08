@@ -4,6 +4,7 @@ func sayHi(){
     print("hi");
 }
 
+var a = 1;
 
 func loop(a, b){
     while(b > 0){

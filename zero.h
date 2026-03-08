@@ -1733,6 +1733,11 @@ void itf(MapPair *pair, void *) {
 }
 
 void instruction_to_file() {
+  if (GET_INSTRUCTION_STORE()->static_func != NULL) {
+    MapPair pair = (MapPair){.key = "_static",
+                             .value = GET_INSTRUCTION_STORE()->static_func};
+    itf(&pair, NULL);
+  }
   map_foreach(GET_INSTRUCTION_STORE()->map, itf, NULL);
 }
 
