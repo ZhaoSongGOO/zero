@@ -1351,14 +1351,19 @@ void statement_stmt_if_visitor(struct syntax_statement *statement) {
   expression_visitor(statement->data.if_stmt.expression);
   int jump_to_false_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
   statement_visitor(statement->data.if_stmt.if_block);
-  int jump_to_end_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
+  int jump_to_end_index;
+  if (statement->data.if_stmt.else_block != NULL) {
+    jump_to_end_index = INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "JUMP");
+  }
   int count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
-  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_false_index, "JT %d",
+  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_false_index, "JF %d",
                      count - jump_to_false_index - 1);
-  statement_visitor(statement->data.if_stmt.else_block);
-  count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
-  INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_end_index, "JUMP %d",
-                     count - jump_to_end_index - 1);
+  if (statement->data.if_stmt.else_block != NULL) {
+    statement_visitor(statement->data.if_stmt.else_block);
+    count = INSTRUCTION_COUNT(CURRENT_FUNCTION_NAME);
+    INSTRUCTION_UPDATE(CURRENT_FUNCTION_NAME, jump_to_end_index, "JUMP %d",
+                       count - jump_to_end_index - 1);
+  }
 }
 
 void statement_stmt_block_visitor(struct syntax_statement *statement) {
@@ -1695,7 +1700,7 @@ typedef enum {
   I_ASSIGN,
   I_FREE,
   I_JUMP,
-  I_JT, // if stack top is true, jump, else do nothing
+  I_JF, // if stack top is true, jump, else do nothing
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -1787,7 +1792,7 @@ INSTRUCTION *NEW_NOT_EQUAL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
-INSTRUCTION *NEW_JT_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -1812,7 +1817,7 @@ void init_actions() {
   map_insert(actions, "ASSIGN", NEW_ASSIGN_INSTRUCTION);
   map_insert(actions, "FREE", NEW_FREE_INSTRUCTION);
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
-  map_insert(actions, "JT", NEW_JT_INSTRUCTION);
+  map_insert(actions, "JF", NEW_JF_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2200,7 +2205,7 @@ void JUMP_INST_RUN(VM *vm, ZValue *value) {
   vm->cur_context->pc += value->data.i_val;
 }
 
-void JT_INST_RUN(VM *vm, ZValue *value) {
+void JF_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_INT);
   if (!is_true(vm, vm->stacks[vm->sp])) {
     vm->cur_context->pc += value->data.i_val;
@@ -2272,8 +2277,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_JUMP:
       JUMP_INST_RUN(vm, inst->v);
       break;
-    case I_JT:
-      JT_INST_RUN(vm, inst->v);
+    case I_JF:
+      JF_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -2472,11 +2477,11 @@ INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_JUMP, v);
 }
 
-INSTRUCTION *NEW_JT_INSTRUCTION(VM *vm, const char *value) {
+INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
   ZValue *v = (ZValue *)malloc(sizeof(ZValue));
   v->type = VAL_INT;
   v->data.i_val = (int)strtod(value, NULL);
-  return new_inst(I_JT, v);
+  return new_inst(I_JF, v);
 }
 
 #endif
