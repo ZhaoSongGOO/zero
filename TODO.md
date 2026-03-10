@@ -96,7 +96,7 @@ func main(){
 }
 ```
 
-8. 📌 support access.
+8. ✅ support access.
 
 ```js
 func main(){
@@ -105,7 +105,13 @@ func main(){
 }
 ```
 
-9. support access functin type member
+9.  📌 remove register
+
+- remove ei register
+- remove cvalues register
+
+
+10.  📌 support access functin type member
 
 ```js
 func k(a){
@@ -118,7 +124,7 @@ func main(){
 }
 ```
 
-10. 📌 for member functio, support `this` keyword.
+11. 📌 for member functio, support `this` keyword.
 
 ```js
 func k(a){
@@ -131,7 +137,7 @@ func main(){
 }
 ```
 
-11. 📌 recycle include and include twice.
+12. 📌 recycle include and include twice.
 
 ```js
 include("std");
