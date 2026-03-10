@@ -63,4 +63,11 @@ func main(){
     var d = { "key": 1, "address": "abc"};
     print(d.key);
     print(d.address);
+
+    {
+        var d = 12;
+        print(d);
+    }
+
+    print(d);
 }

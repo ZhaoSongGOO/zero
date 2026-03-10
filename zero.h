@@ -743,6 +743,7 @@ struct syntax_expr {
       bool from_params;
       int offset;
       char *name;
+      int var_index;
     } identifier_expr;
 
     struct {
@@ -777,6 +778,7 @@ struct syntax_statement {
   union {
     struct {
       char *name;
+      int var_index;
       struct syntax_expr *initializer;
     } var_stmt;
 
@@ -1057,6 +1059,10 @@ struct syntax_statement *parser_if_statement(struct Parser *parser) {
 
 struct syntax_statement *parser_block_statement(struct Parser *parser) {
   expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
+  struct parser_scope *psp = new_parser_scope();
+  psp->parent = parser->cur_scope;
+  psp->params = parser->cur_scope->params;
+  parser->cur_scope = psp;
   struct syntax_statement *b_stmt =
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
   b_stmt->data.block_stmt.statements = new_vec();
@@ -1066,6 +1072,7 @@ struct syntax_statement *parser_block_statement(struct Parser *parser) {
     b_stmt->data.block_stmt.statements->push(b_stmt->data.block_stmt.statements,
                                              st);
   }
+  parser->cur_scope = parser->cur_scope->parent;
   expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
   return b_stmt;
 }
@@ -1079,6 +1086,15 @@ struct syntax_statement *parser_ret_stmt(struct Parser *parser) {
   statement->data.ret_stmt.expr = expr;
   expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
+}
+
+int get_var_index(struct parser_scope *scope) {
+  int index = 0;
+  while (scope != NULL) {
+    index += scope->variables->count;
+    scope = scope->parent;
+  }
+  return index;
 }
 
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
@@ -1095,9 +1111,11 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
   statement->type = STMT_VAR_DECL;
   statement->data.var_stmt.initializer = expr;
   statement->data.var_stmt.name = id_name;
+  statement->data.var_stmt.var_index = get_var_index(parser->cur_scope);
   if (map_get(parser->cur_scope->variables, id_name) == NULL &&
       map_get(parser->cur_scope->params, id_name) == NULL) {
-    map_insert(parser->cur_scope->variables, id_name, NULL);
+    map_insert(parser->cur_scope->variables, id_name,
+               (void *)statement->data.var_stmt.var_index);
   } else {
     printf("variable(%s) redefine\n", id_name);
     assert(false);
@@ -1295,6 +1313,16 @@ MapPair *get_variables_from_parser_scope(struct parser_scope *scope,
   return NULL;
 }
 
+int get_var_index_in_scope(struct parser_scope *scope, const char *key) {
+  while (scope != NULL) {
+    MapPair *p = map_get(scope->variables, key);
+    if (p != NULL) {
+      return (int)p->value;
+    }
+    scope = scope->parent;
+  }
+}
+
 struct syntax_expr *parser_primary(struct Parser *parser) {
   switch (parser->sc->cur_token.type) {
   case TOKEN_NUM: {
@@ -1348,6 +1376,9 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     if (variable_define_from_params != NULL) {
       id->data.identifier_expr.from_params = true;
       id->data.identifier_expr.offset = (int)variable_define_from_params->value;
+    } else {
+      id->data.identifier_expr.var_index = get_var_index_in_scope(
+          parser->cur_scope, id->data.identifier_expr.name);
     }
     if (parser->sc->cur_token.type == TOKEN_ACCESS) {
       expected_token_type_and_run(parser->sc, TOKEN_ACCESS);
@@ -1744,8 +1775,8 @@ void instruction_to_file() {
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_VAR_DECL);
   expression_visitor(statement->data.var_stmt.initializer);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %s",
-                   statement->data.var_stmt.name);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
+                   statement->data.var_stmt.var_index);
 }
 void statement_stmt_expr_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_EXPR);
@@ -1756,11 +1787,11 @@ void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
   case EXPR_ID: {
     if (expr->data.identifier_expr.from_params) {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d", // sp-%d
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
                        expr->data.identifier_expr.offset);
     } else {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %s",
-                       expr->data.identifier_expr.name);
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d", // bp+%d
+                       expr->data.identifier_expr.var_index);
     }
   } break;
   case EXPR_BINARY:
@@ -2010,7 +2041,7 @@ struct zero_context {
   Map *refs;
   struct zero_context *parent;
   unsigned int pc; // current pc
-  unsigned int bp;
+  int bp;
 };
 
 #define Context struct zero_context
@@ -2062,8 +2093,8 @@ struct zero_vm {
   Context *cur_context;
   Map *ready_link;
   int sp; // stack top
-  void *stacks[256];
   Map *registers;
+  void *stacks[1024];
 };
 #define VM struct zero_vm
 
@@ -2245,10 +2276,16 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     access the actual value being referenced, rather than the reference object
     itself.
     */
-    if (v->type == VAL_REF) {
-      value->data.ptr = v->data.ptr;
-    } else {
-      value->data.ptr = v;
+    // if (v->type == VAL_REF) {
+    //   value->data.ptr = v->data.ptr;
+    // } else {
+    //   value->data.ptr = v;
+    // }
+    if (value->type == VAL_OFFSET) {
+      // if(vm->sp < value->data.i_val){
+      //   vm->sp = value->data.i_val;
+      // }
+      vm->stacks[value->data.i_val] = v;
     }
   }
 }
@@ -2257,7 +2294,7 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
   // printf("LOAD---> %ld\n", value);
   if (value->type == VAL_OFFSET) {
     int offset = value->data.i_val;
-    ZValue *src = vm->stacks[vm->cur_context->bp - offset];
+    ZValue *src = vm->stacks[vm->cur_context->bp + offset];
     if (src->type == VAL_REF) {
       vm->stacks[++vm->sp] = src;
     } else {
@@ -2280,7 +2317,7 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
           }
         ```
       */
-      vm->stacks[vm->cur_context->bp - offset] = zref;
+      vm->stacks[vm->cur_context->bp + offset] = zref;
       vm->stacks[++vm->sp] = zref;
     }
   } else if (value->type == VAL_REGISTER) {
@@ -2454,7 +2491,7 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
 
 void ASSIGN_INST_RUN(VM *vm, ZValue *value) {
   ZValue *source = vm->stacks[vm->sp--];
-  ZValue *target = vm->stacks[vm->sp];
+  ZValue *target = vm->stacks[vm->sp--];
   assert(target->type == VAL_REF);
   if (source->type != VAL_REF) {
     target->data.ptr = source;
@@ -2623,7 +2660,7 @@ void JUMP_INST_RUN(VM *vm, ZValue *value) {
 
 void JF_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_INT);
-  if (!is_true(vm, vm->stacks[vm->sp])) {
+  if (!is_true(vm, vm->stacks[vm->sp--])) {
     vm->cur_context->pc += value->data.i_val;
   }
 }
@@ -2655,7 +2692,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
   func->ctx->pc = 0;
-  func->ctx->bp = vm->sp;
+  func->ctx->bp = vm->sp < 0 ? 0 : vm->sp;
   // func->ctx->parent = vm->cur_context;
   vm->cur_context = func->ctx;
   if (func->is_builtin) {
@@ -2770,14 +2807,9 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
     return new_inst(I_STORE, zv);
   } else {
     ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-    v->type = VAL_REF;
-    MapPair *p = map_get(vm->cur_context->refs, value);
-    if (p != NULL) {
-      printf("variable(%s) redefine\n", value);
-      assert(false);
-    }
-    map_insert(vm->cur_context->refs, value, v);
-    v->data.ptr = value;
+    v->type = VAL_OFFSET;
+    v->data.i_val = (int)strtod(value, NULL);
+    ;
     return new_inst(I_STORE, v);
   }
 }
@@ -2818,9 +2850,7 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     zv->data.ptr = name;
     return new_inst(I_LOAD, zv);
   } else {
-    MapPair *pair = get_map_pair_from_context(vm, value);
-    assert(pair != NULL);
-    return new_inst(I_LOAD, pair->value);
+    assert(false);
   }
 }
 
