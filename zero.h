@@ -724,7 +724,7 @@ struct syntax_expr {
       // struct syntax_expr **args;
       // uint8_t arg_count;
       struct Vec *args;
-
+      bool need_return;
     } call_expr;
 
     struct {
@@ -1129,6 +1129,9 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
   statement->type = STMT_EXPR;
   statement->data.expr_stmt.expr = parser_expr(parser);
+  if (statement->data.expr_stmt.expr->type == EXPR_CALL) {
+    statement->data.expr_stmt.expr->data.call_expr.need_return = false;
+  }
   expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
 }
@@ -1423,6 +1426,7 @@ struct syntax_expr *parser_call(struct syntax_expr *caller,
       (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
   call->type = EXPR_CALL;
   call->data.call_expr.source_in_stack = false;
+  call->data.call_expr.need_return = true;
   if (caller->type == EXPR_ID) {
     call->data.call_expr.func_name = caller->data.identifier_expr.name;
   } else if (caller->type == EXPR_ACCESS) {
@@ -1948,8 +1952,9 @@ void expression_call_visitor(struct syntax_expr *expr) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                      expr->data.call_expr.args->count);
   }
-
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
+  if (expr->data.call_expr.need_return) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
+  }
 }
 
 void expression_array_visitor(struct syntax_expr *expr) {
