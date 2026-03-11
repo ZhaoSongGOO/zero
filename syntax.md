@@ -1,6 +1,6 @@
 
 ```
-program    = { statement | func_define } ;
+program    = { func_define } ;
 
 statement  = var_decl ";" 
            | expr_stmt ";"

@@ -927,11 +927,13 @@ struct syntax_program *parser_program(struct Parser *parser) {
                                      stmt->data.include_stmt.include_path);
         continue;
       }
-      struct syntax_top_module *module =
-          (struct syntax_top_module *)malloc(sizeof(struct syntax_top_module));
-      module->type = STATEMENT;
-      module->data.statement = stmt;
-      program->modules->push(program->modules, module);
+      // struct syntax_top_module *module =
+      //     (struct syntax_top_module *)malloc(sizeof(struct
+      //     syntax_top_module));
+      // module->type = STATEMENT;
+      // module->data.statement = stmt;
+      // program->modules->push(program->modules, module);
+      assert(false);
     }
   }
   return program;
@@ -1515,11 +1517,10 @@ void program_visitor(struct syntax_program *program) {
   for (int i = 0; i < program->modules->count; i++) {
     struct syntax_top_module *module =
         (struct syntax_top_module *)program->modules->get(program->modules, i);
-    if (module->type == STATEMENT) {
-      CURRENT_FUNCTION_NAME = "_static";
-      statement_visitor(module->data.statement);
-    } else if (module->type == FUNC_DEFINE) {
+    if (module->type == FUNC_DEFINE) {
       function_define_visitor(module->data.func_define);
+    } else {
+      assert(false);
     }
   }
 }
@@ -1655,14 +1656,6 @@ struct instruction_store *new_instruction_store() {
   inst_store->map = new_map();
   inst_store->childs = new_vec();
   inst_store->parent = NULL;
-  struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
-  s->count = 0;
-  s->head = NULL;
-  s->tail = NULL;
-  s->get = str_store_get_impl;
-  s->insert = str_store_insert_impl;
-  s->insert_raw = str_store_insert_raw_impl;
-  inst_store->static_func = s;
   return inst_store;
 }
 
@@ -1696,30 +1689,22 @@ void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...) {
   va_start(args, fmt);
   vsnprintf(buf, len + 1, fmt, args);
   va_end(args);
-  if (strcmp(seg, "_static") == 0) {
-    gs->static_func->get(gs->static_func, index)->str = buf;
-  } else {
-    struct map_pair *pair = map_get(gs->map, seg);
-    if (pair == NULL) {
-      return;
-    }
-    struct str_store *s = (struct str_store *)pair->value;
-    s->get(s, index)->str = buf;
+  struct map_pair *pair = map_get(gs->map, seg);
+  if (pair == NULL) {
+    return;
   }
+  struct str_store *s = (struct str_store *)pair->value;
+  s->get(s, index)->str = buf;
 }
 
 int INSTRUCTION_COUNT(const char *seg) {
   struct instruction_store *gs = GET_INSTRUCTION_STORE();
-  if (strcmp(seg, "_static") == 0) {
-    return gs->static_func->count;
-  } else {
-    struct map_pair *pair = map_get(gs->map, seg);
-    if (pair == NULL) {
-      return 0; // if have no instruction, count is 0. okay?
-    }
-    struct str_store *s = (struct str_store *)pair->value;
-    return s->count;
+  struct map_pair *pair = map_get(gs->map, seg);
+  if (pair == NULL) {
+    return 0; // if have no instruction, count is 0. okay?
   }
+  struct str_store *s = (struct str_store *)pair->value;
+  return s->count;
 }
 
 int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
@@ -1744,26 +1729,21 @@ int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   //     write(gs->fd, "\n", 1);
   //   }
   // }
-  if (strcmp(seg, "_static") == 0) {
-    gs->static_func->insert_raw(gs->static_func, buf);
-  } else {
-    struct map_pair *pair = map_get(gs->map, seg);
-    if (pair == NULL) {
-      struct str_store *s =
-          (struct str_store *)malloc(sizeof(struct str_store));
-      s->count = 0;
-      s->head = NULL;
-      s->tail = NULL;
-      s->get = str_store_get_impl;
-      s->insert = str_store_insert_impl;
-      s->insert_raw = str_store_insert_raw_impl;
-      s->insert_raw(s, buf);
-      map_insert(gs->map, seg, s);
-      return 0;
-    }
-    struct str_store *s = (struct str_store *)pair->value;
-    return s->insert_raw(s, buf);
+  struct map_pair *pair = map_get(gs->map, seg);
+  if (pair == NULL) {
+    struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
+    s->count = 0;
+    s->head = NULL;
+    s->tail = NULL;
+    s->get = str_store_get_impl;
+    s->insert = str_store_insert_impl;
+    s->insert_raw = str_store_insert_raw_impl;
+    s->insert_raw(s, buf);
+    map_insert(gs->map, seg, s);
+    return 0;
   }
+  struct str_store *s = (struct str_store *)pair->value;
+  return s->insert_raw(s, buf);
 }
 
 void itf(MapPair *pair, void *) {
@@ -1780,11 +1760,6 @@ void itf(MapPair *pair, void *) {
 }
 
 void instruction_to_file() {
-  if (GET_INSTRUCTION_STORE()->static_func != NULL) {
-    MapPair pair = (MapPair){.key = "_static",
-                             .value = GET_INSTRUCTION_STORE()->static_func};
-    itf(&pair, NULL);
-  }
   map_foreach(GET_INSTRUCTION_STORE()->map, itf, NULL);
 }
 
@@ -2106,7 +2081,6 @@ ZFunction *new_function() {
 }
 
 struct zero_vm {
-  struct Vec *globals;
   ZValue *entry;
   Context *root_context;
   Context *cur_context;
@@ -2206,12 +2180,7 @@ Context *current_global_ctx = NULL;
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   ZFunction *f = new_function();
-  if (strcmp(pair->key, "_static") != 0) {
-    f->ctx->parent = current_global_ctx;
-  } else {
-    f->ctx->parent = vm->cur_context;
-    current_global_ctx = f->ctx;
-  }
+  f->ctx->parent = vm->cur_context;
   vm->cur_context = f->ctx;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
@@ -2229,15 +2198,10 @@ void list_inst_store(MapPair *pair, void *data) {
   value->type = VAL_FUNC;
   value->data.ptr = f;
 
-  if (strcmp(pair->key, "_static") == 0) {
-    vm->globals->push(vm->globals, value);
-  } else {
-    if (strcmp(pair->key, "main") == 0) {
-      vm->entry = value;
-    }
-    map_insert(vm->root_context->symbols, pair->key, value);
+  if (strcmp(pair->key, "main") == 0) {
+    vm->entry = value;
   }
-
+  map_insert(vm->root_context->symbols, pair->key, value);
   vm->cur_context = f->ctx->parent;
 }
 
@@ -2248,8 +2212,6 @@ void vm_compile_stage_kernel(VM *vm, struct instruction_store *store) {
   for (int i = 0; i < store->childs->count; i++) {
     vm_compile_stage_kernel(vm, store->childs->get(store->childs, i));
   }
-  MapPair pair = (MapPair){.key = "_static", .value = store->static_func};
-  list_inst_store(&pair, vm);
   map_foreach(store->map, list_inst_store, vm);
 }
 
@@ -2811,9 +2773,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
-int VM_Run(VM *vm) {
-  CALL_INST_RUN(vm, vm->entry);
-}
+int VM_Run(VM *vm) { CALL_INST_RUN(vm, vm->entry); }
 
 VM *new_vm() {
   VM *vm = (VM *)malloc(sizeof(VM));
@@ -2821,7 +2781,6 @@ VM *new_vm() {
   vm->root_context = new_context();
   vm->cur_context = vm->root_context;
   vm->ready_link = new_map();
-  vm->globals = new_vec();
   vm->sp = -1;
   vm->registers = new_map();
   map_insert(vm->registers, "ei", NULL);
