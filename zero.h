@@ -1699,7 +1699,7 @@ int INSTRUCTION_COUNT(const char *seg) {
   } else {
     struct map_pair *pair = map_get(gs->map, seg);
     if (pair == NULL) {
-      return -1;
+      return 0; // if have no instruction, count is 0. okay?
     }
     struct str_store *s = (struct str_store *)pair->value;
     return s->count;
@@ -2040,7 +2040,7 @@ struct zero_context {
   struct Vec *cvalues;
   Map *refs;
   struct zero_context *parent;
-  unsigned int pc; // current pc
+  int pc; // current pc
   int bp;
 };
 
