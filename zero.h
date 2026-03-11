@@ -784,6 +784,7 @@ struct syntax_statement {
 
     struct {
       struct syntax_expr *expr;
+      bool need_pop;
     } expr_stmt;
 
     struct {
@@ -1131,6 +1132,12 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
   statement->data.expr_stmt.expr = parser_expr(parser);
   if (statement->data.expr_stmt.expr->type == EXPR_CALL) {
     statement->data.expr_stmt.expr->data.call_expr.need_return = false;
+  }
+  if (!(statement->data.expr_stmt.expr->type == EXPR_BINARY &&
+        statement->data.expr_stmt.expr->data.binary_expr.op == TOKEN_ASSIGN)) {
+    statement->data.expr_stmt.need_pop = true;
+  } else {
+    statement->data.expr_stmt.need_pop = false;
   }
   expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
@@ -1530,8 +1537,13 @@ void statement_visitor(struct syntax_statement *statment) {
   switch (statment->type) {
   case STMT_VAR_DECL:
     return statement_stmt_var_decl_visitor(statment);
-  case STMT_EXPR:
-    return statement_stmt_expr_visitor(statment);
+  case STMT_EXPR: {
+    statement_stmt_expr_visitor(statment);
+    if (statment->data.expr_stmt.need_pop) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "POP");
+    }
+    return;
+  }
   case STMT_RETURN:
     return statement_stmt_ret_visitor(statment);
   case STMT_IF:
@@ -2037,7 +2049,8 @@ typedef enum {
   I_FREE,
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
-  I_ACCESS
+  I_ACCESS,
+  I_POP
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2131,6 +2144,7 @@ INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_POP_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2157,6 +2171,7 @@ void init_actions() {
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
   map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
+  map_insert(actions, "POP", NEW_POP_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2673,6 +2688,8 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
+void POP_INST_RUN(VM *vm, ZValue *value) { vm->sp -= 1; }
+
 void ACCESS_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
@@ -2767,6 +2784,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       break;
     case I_JF:
       JF_INST_RUN(vm, inst->v);
+      break;
+    case I_POP:
+      POP_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -2983,6 +3003,10 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_ACCESS, NULL);
+}
+
+INSTRUCTION *NEW_POP_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_POP, NULL);
 }
 
 const char *append_suffix(const char *m) {
