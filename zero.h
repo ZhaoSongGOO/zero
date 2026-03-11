@@ -2282,9 +2282,9 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     //   value->data.ptr = v;
     // }
     if (value->type == VAL_OFFSET) {
-      // if(vm->sp < value->data.i_val){
-      //   vm->sp = value->data.i_val;
-      // }
+      if (vm->sp < value->data.i_val) {
+        vm->sp = value->data.i_val;
+      }
       vm->stacks[value->data.i_val] = v;
     }
   }
@@ -2656,6 +2656,9 @@ bool is_true(VM *vm, ZValue *value) {
 void JUMP_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_INT);
   vm->cur_context->pc += value->data.i_val;
+  if (value->data.i_val < 0) {
+    vm->cur_context->pc -= 1;
+  }
 }
 
 void JF_INST_RUN(VM *vm, ZValue *value) {
