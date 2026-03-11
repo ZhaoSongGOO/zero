@@ -1130,9 +1130,9 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
   statement->type = STMT_EXPR;
   statement->data.expr_stmt.expr = parser_expr(parser);
-  if (statement->data.expr_stmt.expr->type == EXPR_CALL) {
-    statement->data.expr_stmt.expr->data.call_expr.need_return = false;
-  }
+  // if (statement->data.expr_stmt.expr->type == EXPR_CALL) {
+  //   statement->data.expr_stmt.expr->data.call_expr.need_return = false;
+  // }
   if (!(statement->data.expr_stmt.expr->type == EXPR_BINARY &&
         statement->data.expr_stmt.expr->data.binary_expr.op == TOKEN_ASSIGN)) {
     statement->data.expr_stmt.need_pop = true;
@@ -2000,7 +2000,8 @@ typedef enum {
   VAL_FUNC,
   VAL_REF,
   VAL_OFFSET,
-  VAL_REGISTER
+  VAL_REGISTER,
+  VAL_NULL,
 } ValueType;
 
 typedef struct {
@@ -2345,6 +2346,10 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
     if (rv->value != NULL) {
       vm->stacks[++vm->sp] = rv->value;
       rv->value = NULL;
+    } else {
+      ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+      v->type = VAL_NULL;
+      vm->stacks[++vm->sp] = v;
     }
   } else {
     vm->stacks[++vm->sp] = value;
@@ -2807,9 +2812,6 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
 }
 
 int VM_Run(VM *vm) {
-  for (int i = vm->globals->count - 1; i >= 0; i--) {
-    CALL_INST_RUN(vm, vm->globals->get(vm->globals, i));
-  }
   CALL_INST_RUN(vm, vm->entry);
 }
 
