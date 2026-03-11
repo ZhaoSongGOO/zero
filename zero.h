@@ -2692,7 +2692,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
   func->ctx->pc = 0;
-  func->ctx->bp = vm->sp < 0 ? 0 : vm->sp;
+  bool vm_stack_is_empty = vm->sp < 0;
+  func->ctx->bp = vm_stack_is_empty ? 0 : vm->sp;
   // func->ctx->parent = vm->cur_context;
   vm->cur_context = func->ctx;
   if (func->is_builtin) {
@@ -2770,7 +2771,11 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   function stack, but you are responsible for clearing the data inside the
   sub-function stack yourself.
   */
-  vm->sp = func->ctx->bp;
+  if (vm_stack_is_empty) {
+    vm->sp = -1;
+  } else {
+    vm->sp = func->ctx->bp;
+  }
 }
 
 int VM_Run(VM *vm) {
