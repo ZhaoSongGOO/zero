@@ -2030,6 +2030,9 @@ typedef enum {
 } INSTRUCTION_CODE;
 
 struct zero_context {
+  Map *symbols; // string -> ZValue
+  struct Vec *cvalues;
+  Map *refs;
   struct zero_context *parent;
   int pc; // current pc
   int bp;
@@ -2052,26 +2055,25 @@ INSTRUCTION *new_inst(INSTRUCTION_CODE code, ZValue *v) {
 typedef struct {
   // INSTRUCTION *instructions;
   struct Vec *instructions;
+  Context *ctx;
   bool is_builtin;
   const char *name;
   int params_count;
 } ZFunction;
 
-typedef struct {
-  ZFunction *func;
-  Context *ctx;
-} Runnable;
-
 Context *new_context() {
   Context *ctx = (Context *)malloc(sizeof(Context));
+  ctx->symbols = new_map();
   ctx->parent = NULL;
+  ctx->cvalues = new_vec();
+  ctx->refs = new_map();
   ctx->bp = 0;
-  ctx->pc = 0;
   return ctx;
 }
 
 ZFunction *new_function() {
   ZFunction *func = (ZFunction *)malloc(sizeof(ZFunction));
+  func->ctx = new_context();
   func->instructions = new_vec();
   func->is_builtin = false;
   func->name = NULL;
@@ -2085,8 +2087,6 @@ struct zero_vm {
   Map *ready_link;
   int sp; // stack top
   Map *registers;
-  Map *symbols; // string -> ZValue
-  struct Vec *cvalues;
   void *stacks[1024];
 };
 #define VM struct zero_vm
@@ -2160,10 +2160,11 @@ ZValue *get_builtin_function_value(VM *vm, const char *name) {
 }
 
 void init_builtin(VM *vm) {
-  map_insert(vm->symbols, "print", get_builtin_function_value(vm, "print"));
-  map_insert(vm->symbols, "NEW_ARRAY",
+  map_insert(vm->root_context->symbols, "print",
+             get_builtin_function_value(vm, "print"));
+  map_insert(vm->root_context->symbols, "NEW_ARRAY",
              get_builtin_function_value(vm, "NEW_ARRAY"));
-  map_insert(vm->symbols, "NEW_OBJECT",
+  map_insert(vm->root_context->symbols, "NEW_OBJECT",
              get_builtin_function_value(vm, "NEW_OBJECT"));
 }
 
@@ -2179,6 +2180,8 @@ Context *current_global_ctx = NULL;
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   ZFunction *f = new_function();
+  f->ctx->parent = vm->cur_context;
+  vm->cur_context = f->ctx;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
     char *inst_str = store->get(store, i)->str;
@@ -2198,7 +2201,8 @@ void list_inst_store(MapPair *pair, void *data) {
   if (strcmp(pair->key, "main") == 0) {
     vm->entry = value;
   }
-  map_insert(vm->symbols, pair->key, value);
+  map_insert(vm->root_context->symbols, pair->key, value);
+  vm->cur_context = f->ctx->parent;
 }
 
 void vm_compile_stage_kernel(VM *vm, struct instruction_store *store) {
@@ -2218,7 +2222,7 @@ void vm_compile_stage(VM *vm) {
 void vm_link_progress(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   struct Vec *funcs = (struct Vec *)pair->value;
-  MapPair *r = map_get(vm->symbols, pair->key);
+  MapPair *r = map_get(vm->root_context->symbols, pair->key);
   if (r == NULL) {
     printf("linker error, %s not found.", pair->key);
     return;
@@ -2506,7 +2510,8 @@ void print_data(VM *vm, ZValue *v) {
     printf("%f", v->data.f_val);
     break;
   case VAL_STR_INDEX: {
-    printf("%s", vm->cvalues->get(vm->cvalues, v->data.i_val));
+    printf("%s", vm->root_context->cvalues->get(vm->root_context->cvalues,
+                                                v->data.i_val));
   } break;
   case VAL_BOOL: {
     if (v->data.b_val) {
@@ -2599,7 +2604,8 @@ void new_object(VM *vm) {
     ZValue *key = vm->stacks[stack_base + i * 2 + 1];
     assert(key->type == VAL_STR_INDEX);
     ZValue *value = vm->stacks[stack_base + i * 2 + 2];
-    arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
+    arr->entries[i].key = vm->root_context->cvalues->get(
+        vm->root_context->cvalues, key->data.i_val);
     arr->entries[i].value.type = value->type;
     arr->entries[i].value.data = value->data;
   }
@@ -2659,7 +2665,8 @@ void ACCESS_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj = (ZValue *)obj_ref->data.ptr;
   assert(obj->type == VAL_OBJ_PTR);
   ZObject *raw_obj = (ZObject *)(obj->data.ptr);
-  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
+  const char *key = vm->root_context->cvalues->get(vm->root_context->cvalues,
+                                                   prop->data.i_val);
   for (int i = 0; i < raw_obj->count; i++) {
     if (strcmp(raw_obj->entries[i].key, key) == 0) {
       vm->stacks[--(vm->sp)] = &(raw_obj->entries[i].value);
@@ -2676,21 +2683,19 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   }
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
-  Runnable *runnable = (Runnable *)malloc(sizeof(Runnable));
-  runnable->ctx = new_context();
-  runnable->func = func;
+  func->ctx->pc = 0;
   bool vm_stack_is_empty = vm->sp < 0;
-  runnable->ctx->bp = vm_stack_is_empty ? 0 : vm->sp;
-  runnable->ctx->parent = vm->cur_context;
-  vm->cur_context = runnable->ctx;
+  func->ctx->bp = vm_stack_is_empty ? 0 : vm->sp;
+  // func->ctx->parent = vm->cur_context;
+  vm->cur_context = func->ctx;
   if (func->is_builtin) {
     call_builtin_function(vm, func);
-    vm->cur_context = runnable->ctx->parent;
+    vm->cur_context = func->ctx->parent;
     return;
   }
   struct Vec *code = func->instructions;
-  for (; runnable->ctx->pc < code->count; runnable->ctx->pc++) {
-    INSTRUCTION *inst = (INSTRUCTION *)code->get(code, runnable->ctx->pc);
+  for (; func->ctx->pc < code->count; func->ctx->pc++) {
+    INSTRUCTION *inst = (INSTRUCTION *)code->get(code, func->ctx->pc);
     switch (inst->code) {
     case I_PUSH:
       PUSH_INST_RUN(vm, (ZValue *)inst->v);
@@ -2699,7 +2704,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       STORE_INST_RUN(vm, (ZValue *)inst->v);
       if (inst->v->type == VAL_REGISTER &&
           strcmp((const char *)(inst->v->data.ptr), "ei") == 0) {
-        runnable->ctx->pc = code->count;
+        func->ctx->pc = code->count;
       }
     } break;
     case I_LOAD:
@@ -2718,9 +2723,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       DIV_INST_RUN(vm, (ZValue *)inst->v);
       break;
     case I_CALL: {
-      vm->cur_context = runnable->ctx->parent;
+      vm->cur_context = func->ctx->parent;
       CALL_INST_RUN(vm, (ZValue *)inst->v);
-      vm->cur_context = runnable->ctx;
+      vm->cur_context = func->ctx;
     } break;
     case I_ACCESS:
       ACCESS_INST_RUN(vm, inst->v);
@@ -2754,7 +2759,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       assert(false);
     }
   }
-  vm->cur_context = runnable->ctx->parent;
+  vm->cur_context = func->ctx->parent;
   /*
   It's very important!
   Very important: The FREE instruction cleans up parameters from the source
@@ -2764,7 +2769,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   if (vm_stack_is_empty) {
     vm->sp = -1;
   } else {
-    vm->sp = runnable->ctx->bp;
+    vm->sp = func->ctx->bp;
   }
 }
 
@@ -2778,8 +2783,6 @@ VM *new_vm() {
   vm->ready_link = new_map();
   vm->sp = -1;
   vm->registers = new_map();
-  vm->symbols = new_map();
-  vm->cvalues = new_vec();
   map_insert(vm->registers, "ei", NULL);
   return vm;
 }
@@ -2800,8 +2803,26 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
     ZValue *v = (ZValue *)malloc(sizeof(ZValue));
     v->type = VAL_OFFSET;
     v->data.i_val = (int)strtod(value, NULL);
+    ;
     return new_inst(I_STORE, v);
   }
+}
+
+MapPair *get_map_pair_from_context(VM *vm, const char *value) {
+  Context *ctx = vm->cur_context;
+  while (ctx != NULL) {
+    MapPair *pair = map_get(ctx->refs, value);
+    if (pair == NULL) {
+      ctx = ctx->parent;
+    } else {
+      return pair;
+    }
+  }
+  // if (vm->global != NULL) {
+  //   ZFunction *f = (ZFunction *)(vm->global->data.ptr);
+  //   return map_get(f->ctx->refs, value);
+  // }
+  return NULL;
 }
 
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
@@ -2851,8 +2872,8 @@ INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) {
 INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
   ZValue *v = (ZValue *)malloc(sizeof(ZValue));
   v->type = VAL_STR_INDEX;
-  vm->cvalues->push(vm->cvalues, value);
-  v->data.i_val = vm->cvalues->count - 1;
+  vm->root_context->cvalues->push(vm->root_context->cvalues, value);
+  v->data.i_val = vm->root_context->cvalues->count - 1;
   return new_inst(I_PUSH, v);
 }
 

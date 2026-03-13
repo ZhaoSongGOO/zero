@@ -69,6 +69,4 @@ func main(){
     }
 
     print(d);
-
-    print(feb(10));
 }

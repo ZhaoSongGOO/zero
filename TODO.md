@@ -152,12 +152,3 @@ func main(){
 }
 ```
 
-13. ✅ support function call recycle
-
-```js
-func a(){
-    a();
-}
-
-```
-
