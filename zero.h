@@ -798,6 +798,7 @@ struct syntax_statement {
 
     struct {
       struct Vec *statements;
+      int var_min_index;
     } block_stmt;
 
     struct {
@@ -849,6 +850,7 @@ struct parser_scope {
   struct parser_scope *parent;
   Map *variables;
   Map *params;
+  int var_min_index;
 };
 
 struct Parser {
@@ -862,6 +864,7 @@ struct parser_scope *new_parser_scope() {
   psp->parent = NULL;
   psp->variables = new_map();
   psp->params = new_map();
+  psp->var_min_index = -1;
   return psp;
 }
 
@@ -1072,6 +1075,7 @@ struct syntax_statement *parser_block_statement(struct Parser *parser) {
     b_stmt->data.block_stmt.statements->push(b_stmt->data.block_stmt.statements,
                                              st);
   }
+  b_stmt->data.block_stmt.var_min_index = parser->cur_scope->var_min_index;
   parser->cur_scope = parser->cur_scope->parent;
   expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
   return b_stmt;
@@ -1114,8 +1118,12 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
   statement->data.var_stmt.var_index = get_var_index(parser->cur_scope);
   if (map_get(parser->cur_scope->variables, id_name) == NULL &&
       map_get(parser->cur_scope->params, id_name) == NULL) {
-    map_insert(parser->cur_scope->variables, id_name,
-               (void *)statement->data.var_stmt.var_index);
+    int index = statement->data.var_stmt.var_index;
+    map_insert(parser->cur_scope->variables, id_name, (void *)index);
+    if (index < parser->cur_scope->var_min_index ||
+        parser->cur_scope->var_min_index == -1) {
+      parser->cur_scope->var_min_index = index;
+    }
   } else {
     printf("variable(%s) redefine\n", id_name);
     assert(false);
@@ -1511,7 +1519,7 @@ void program_visitor(struct syntax_program *program) {
     struct syntax_top_module *module =
         (struct syntax_top_module *)program->modules->get(program->modules, i);
     if (module->type == STATEMENT) {
-      CURRENT_FUNCTION_NAME = "_static";
+      CURRENT_FUNCTION_NAME = "__init__";
       statement_visitor(module->data.statement);
     } else if (module->type == FUNC_DEFINE) {
       function_define_visitor(module->data.func_define);
@@ -1613,6 +1621,10 @@ void statement_stmt_block_visitor(struct syntax_statement *statement) {
     statement_visitor(statement->data.block_stmt.statements->get(
         statement->data.block_stmt.statements, i));
   }
+  if (statement->data.block_stmt.var_min_index > 0) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "SET %d",
+                     statement->data.block_stmt.var_min_index - 1);
+  }
 }
 
 void statement_stmt_ret_visitor(struct syntax_statement *statement) {
@@ -1691,7 +1703,7 @@ void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...) {
   va_start(args, fmt);
   vsnprintf(buf, len + 1, fmt, args);
   va_end(args);
-  if (strcmp(seg, "_static") == 0) {
+  if (strcmp(seg, "__init__") == 0) {
     gs->static_func->get(gs->static_func, index)->str = buf;
   } else {
     struct map_pair *pair = map_get(gs->map, seg);
@@ -1705,7 +1717,7 @@ void INSTRUCTION_UPDATE(const char *seg, int index, const char *fmt, ...) {
 
 int INSTRUCTION_COUNT(const char *seg) {
   struct instruction_store *gs = GET_INSTRUCTION_STORE();
-  if (strcmp(seg, "_static") == 0) {
+  if (strcmp(seg, "__init__") == 0) {
     return gs->static_func->count;
   } else {
     struct map_pair *pair = map_get(gs->map, seg);
@@ -1739,7 +1751,7 @@ int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   //     write(gs->fd, "\n", 1);
   //   }
   // }
-  if (strcmp(seg, "_static") == 0) {
+  if (strcmp(seg, "__init__") == 0) {
     gs->static_func->insert_raw(gs->static_func, buf);
   } else {
     struct map_pair *pair = map_get(gs->map, seg);
@@ -1776,7 +1788,7 @@ void itf(MapPair *pair, void *) {
 
 void instruction_to_file() {
   if (GET_INSTRUCTION_STORE()->static_func != NULL) {
-    MapPair pair = (MapPair){.key = "_static",
+    MapPair pair = (MapPair){.key = "__init__",
                              .value = GET_INSTRUCTION_STORE()->static_func};
     itf(&pair, NULL);
   }
@@ -2044,7 +2056,8 @@ typedef enum {
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
   I_ACCESS,
-  I_POP
+  I_POP,
+  I_SET
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2139,6 +2152,7 @@ INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_POP_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2166,6 +2180,7 @@ void init_actions() {
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
   map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
   map_insert(actions, "POP", NEW_POP_INSTRUCTION);
+  map_insert(actions, "SET", NEW_SET_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2199,7 +2214,7 @@ Context *current_global_ctx = NULL;
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   ZFunction *f = new_function();
-  if (strcmp(pair->key, "_static") != 0) {
+  if (strcmp(pair->key, "__init__") != 0) {
     f->ctx->parent = current_global_ctx;
   } else {
     f->ctx->parent = vm->cur_context;
@@ -2222,7 +2237,7 @@ void list_inst_store(MapPair *pair, void *data) {
   value->type = VAL_FUNC;
   value->data.ptr = f;
 
-  if (strcmp(pair->key, "_static") == 0) {
+  if (strcmp(pair->key, "__init__") == 0) {
     vm->globals->push(vm->globals, value);
   } else {
     if (strcmp(pair->key, "main") == 0) {
@@ -2241,7 +2256,7 @@ void vm_compile_stage_kernel(VM *vm, struct instruction_store *store) {
   for (int i = 0; i < store->childs->count; i++) {
     vm_compile_stage_kernel(vm, store->childs->get(store->childs, i));
   }
-  MapPair pair = (MapPair){.key = "_static", .value = store->static_func};
+  MapPair pair = (MapPair){.key = "__init__", .value = store->static_func};
   list_inst_store(&pair, vm);
   map_foreach(store->map, list_inst_store, vm);
 }
@@ -2688,6 +2703,11 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
 
 void POP_INST_RUN(VM *vm, ZValue *value) { vm->sp -= 1; }
 
+void SET_INST_RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_INT);
+  vm->sp = value->data.i_val;
+}
+
 void ACCESS_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
@@ -2785,6 +2805,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       break;
     case I_POP:
       POP_INST_RUN(vm, inst->v);
+      break;
+    case I_SET:
+      SET_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -3005,6 +3028,13 @@ INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_POP_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_POP, NULL);
+}
+
+INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_INT;
+  v->data.i_val = (int)strtod(value, NULL);
+  return new_inst(I_SET, v);
 }
 
 const char *append_suffix(const char *m) {
