@@ -73,6 +73,12 @@ func main(){
 
     print(d);
     print(version);
+    {
+        var version = 101;
+        print(version);
+        printVersion();
+    }
+    print(version);
     var version = 1;
     print(version);
     print(printVersion());

@@ -1373,15 +1373,15 @@ int get_var_index_in_scope(struct parser_scope *scope, const char *key) {
   }
 }
 
-int get_var_index_in_scope_without_top(struct parser_scope *scope,
-                                       const char *key) {
+bool get_var_in_scope_without_top(struct parser_scope *scope, const char *key) {
   while (scope != NULL && !scope->is_top_scope) {
     MapPair *p = map_get(scope->variables, key);
     if (p != NULL) {
-      return (int)p->value;
+      return true;
     }
     scope = scope->parent;
   }
+  return false;
 }
 
 struct syntax_expr *parser_primary(struct Parser *parser) {
@@ -1438,9 +1438,8 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
       id->data.identifier_expr.from_params = true;
       id->data.identifier_expr.offset = (int)variable_define_from_params->value;
     } else {
-      id->data.identifier_expr.is_from_top =
-          get_var_index_in_scope_without_top(
-              parser->cur_scope, id->data.identifier_expr.name) == NULL;
+      id->data.identifier_expr.is_from_top = !get_var_in_scope_without_top(
+          parser->cur_scope, id->data.identifier_expr.name);
 
       id->data.identifier_expr.var_index = get_var_index_in_scope(
           parser->cur_scope, id->data.identifier_expr.name);
@@ -1853,7 +1852,7 @@ void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
                      statement->data.var_stmt.var_index);
   } else {
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE #%d",
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
                      statement->data.var_stmt.var_index +
                          GLOBAL_PARSER->root_scope->top_var_count);
   }
@@ -1874,7 +1873,7 @@ void expression_visitor(struct syntax_expr *expr) {
         INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
                          expr->data.identifier_expr.var_index);
       } else {
-        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d", // bp+%d
+        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d",
                          expr->data.identifier_expr.var_index +
                              GLOBAL_PARSER->root_scope->top_var_count);
       }
@@ -2379,13 +2378,27 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       if (vm->sp < target_position) {
         vm->sp = target_position;
       }
-      vm->stacks[target_position] = v;
+      ZValue *target = (ZValue *)malloc(sizeof(ZValue));
+      target->type = VAL_REF;
+      if (v->type == VAL_REF) {
+        target->data.ptr = v->data.ptr;
+      } else {
+        target->data.ptr = v;
+      }
+      vm->stacks[target_position] = target;
     }
   } else {
     if (vm->sp < value->data.i_val) {
       vm->sp = value->data.i_val;
     }
-    vm->stacks[value->data.i_val] = v;
+    ZValue *target = (ZValue *)malloc(sizeof(ZValue));
+    target->type = VAL_REF;
+    if (v->type == VAL_REF) {
+      target->data.ptr = v->data.ptr;
+    } else {
+      target->data.ptr = v;
+    }
+    vm->stacks[value->data.i_val] = target;
   }
 }
 
