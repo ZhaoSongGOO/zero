@@ -8,7 +8,7 @@ sayHi:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
 loop:
   LOAD #-1
   PUSH_D 0
@@ -20,7 +20,7 @@ loop:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #-1
   LOAD #-1
   PUSH_D 1
@@ -36,7 +36,7 @@ action:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #-1
   LOAD #-1
   PUSH_D 1
@@ -60,12 +60,12 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_S "Hello World"
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_F 1.300000
   PUSH_D 2
   PUSH_D 3
@@ -77,58 +77,58 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_B 0
   STORE #4
   PUSH_B 0
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_B 1
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   PUSH_D 2
   E
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   PUSH_D 2
   NE
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   PUSH_D 2
   G
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   PUSH_D 2
   LE
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #1
   PUSH_D 4
   E
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   CALL sayHi
   FREE 0
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   STORE #5
   LOAD #5
@@ -137,7 +137,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #5
   PUSH_D 2
   PUSH_D 3
@@ -149,7 +149,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   STORE #6
   PUSH_D 2
@@ -159,14 +159,14 @@ main:
   CALL add
   FREE 2
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #6
   PUSH_D 1
   ADD
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 2
   PUSH_D 1
   CALL add
@@ -179,7 +179,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   STORE #9
   PUSH_D 2
@@ -189,27 +189,27 @@ main:
   CALL swap
   FREE 2
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #9
   PUSH_D 1
   MULTI
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #10
   PUSH_D 1
   MULTI
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 2
   PUSH_D 99
   CALL loop
   FREE 2
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_S key
   PUSH_D 1
   PUSH_S address
@@ -223,63 +223,63 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #11
   PUSH_S address
   ACCESS
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 12
   STORE #12
   LOAD #12
   CALL print
   FREE 1
   LOAD [ei]
-  POP
-  SET 10
+  FREE 1
+  FREE 1
   LOAD #11
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD 1
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 101
   STORE #12
   LOAD #12
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   CALL printVersion
   FREE 0
   LOAD [ei]
-  POP
-  SET 10
+  FREE 1
+  FREE 1
   LOAD 1
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   STORE #12
   LOAD #12
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   CALL printVersion
   FREE 0
   LOAD [ei]
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 5
   CALL feb
   FREE 1
@@ -287,7 +287,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_S run
   LOAD .action
   PUSH_D 1
@@ -301,7 +301,7 @@ main:
   CALL -2
   FREE 3
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_D 1
   CALL print
   FREE 1
@@ -311,13 +311,13 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   JUMP 5
   PUSH_S "return null"
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #1
   PUSH_N
   ASSIGN
@@ -327,7 +327,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_N
   STORE #14
   LOAD #14
@@ -336,7 +336,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   PUSH_S owner
   LOAD #13
   PUSH_D 1
@@ -346,12 +346,12 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD .action
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #15
   PUSH_S owner
   ACCESS
@@ -360,7 +360,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #15
   PUSH_S owner
   ACCESS
@@ -371,4 +371,4 @@ main:
   CALL -2
   FREE 3
   LOAD [ei]
-  POP
+  FREE 1

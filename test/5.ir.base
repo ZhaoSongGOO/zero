@@ -8,17 +8,17 @@ countdown:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #-0
   PUSH_D 1
   MINUS
   CALL countdown
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
 main:
   PUSH_D 10
   CALL countdown
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1

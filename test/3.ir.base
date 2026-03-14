@@ -10,7 +10,7 @@ main:
   CALL print
   FREE 1
   LOAD [ei]
-  POP
+  FREE 1
   LOAD #1
   LOAD #1
   PUSH_D 1

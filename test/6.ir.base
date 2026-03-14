@@ -1,0 +1,14 @@
+__init__:
+  PUSH_D 3
+  STORE 0
+main:
+  PUSH_D 1
+  STORE #1
+  PUSH_D 2
+  STORE #2
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1

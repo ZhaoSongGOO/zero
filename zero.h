@@ -805,7 +805,7 @@ struct syntax_statement {
 
     struct {
       struct Vec *statements;
-      int var_min_index;
+      int var_count;
     } block_stmt;
 
     struct {
@@ -857,7 +857,6 @@ struct parser_scope {
   struct parser_scope *parent;
   Map *variables;
   Map *params;
-  int var_min_index;
   bool is_top_scope;
   bool is_root_scope;
   int top_var_count;
@@ -877,7 +876,6 @@ struct parser_scope *new_parser_scope() {
   psp->parent = NULL;
   psp->variables = new_map();
   psp->params = new_map();
-  psp->var_min_index = -1;
   psp->is_top_scope = false;
   psp->is_root_scope = false;
   psp->top_var_count = 0;
@@ -1103,7 +1101,7 @@ struct syntax_statement *parser_block_statement(struct Parser *parser) {
     b_stmt->data.block_stmt.statements->push(b_stmt->data.block_stmt.statements,
                                              st);
   }
-  b_stmt->data.block_stmt.var_min_index = parser->cur_scope->var_min_index;
+  b_stmt->data.block_stmt.var_count = parser->cur_scope->variables->count;
   parser->cur_scope = parser->cur_scope->parent;
   expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
   return b_stmt;
@@ -1168,10 +1166,6 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
       statement->data.var_stmt.var_index = get_var_index(parser->cur_scope);
       int index = statement->data.var_stmt.var_index;
       map_insert(parser->cur_scope->variables, id_name, (void *)index);
-      if (index < parser->cur_scope->var_min_index ||
-          parser->cur_scope->var_min_index == -1) {
-        parser->cur_scope->var_min_index = index;
-      }
     } else {
       printf("variable(%s) redefine\n", id_name);
       assert(false);
@@ -1622,7 +1616,7 @@ void statement_visitor(struct syntax_statement *statment) {
   case STMT_EXPR: {
     statement_stmt_expr_visitor(statment);
     if (statment->data.expr_stmt.need_pop) {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "POP");
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE 1");
     }
     return;
   }
@@ -1700,9 +1694,9 @@ void statement_stmt_block_visitor(struct syntax_statement *statement) {
     statement_visitor(statement->data.block_stmt.statements->get(
         statement->data.block_stmt.statements, i));
   }
-  if (statement->data.block_stmt.var_min_index > 0) {
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "SET %d",
-                     statement->data.block_stmt.var_min_index - 1);
+  if (statement->data.block_stmt.var_count > 0) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
+                     statement->data.block_stmt.var_count);
   }
 }
 
@@ -2154,9 +2148,7 @@ typedef enum {
   I_FREE,
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
-  I_ACCESS,
-  I_POP,
-  I_SET
+  I_ACCESS
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2251,8 +2243,6 @@ INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
-INSTRUCTION *NEW_POP_INSTRUCTION(VM *vm, const char *value);
-INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2280,8 +2270,6 @@ void init_actions() {
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
   map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
-  map_insert(actions, "POP", NEW_POP_INSTRUCTION);
-  map_insert(actions, "SET", NEW_SET_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2824,13 +2812,6 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
-void POP_INST_RUN(VM *vm, ZValue *value) { vm->sp -= 1; }
-
-void SET_INST_RUN(VM *vm, ZValue *value) {
-  assert(value->type == VAL_INT);
-  vm->sp = value->data.i_val;
-}
-
 void ACCESS_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
@@ -2927,12 +2908,6 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_JF:
       JF_INST_RUN(vm, inst->v);
       break;
-    case I_POP:
-      POP_INST_RUN(vm, inst->v);
-      break;
-    case I_SET:
-      SET_INST_RUN(vm, inst->v);
-      break;
     default:
       assert(false);
     }
@@ -2995,8 +2970,6 @@ void __INIT__RUN(VM *vm, ZValue *value) {
     case I_FREE:
     case I_JUMP:
     case I_JF:
-    case I_POP:
-    case I_SET:
     default:
       assert(false);
     }
@@ -3207,17 +3180,6 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_ACCESS, NULL);
-}
-
-INSTRUCTION *NEW_POP_INSTRUCTION(VM *vm, const char *value) {
-  return new_inst(I_POP, NULL);
-}
-
-INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_INT;
-  v->data.i_val = (int)strtod(value, NULL);
-  return new_inst(I_SET, v);
 }
 
 const char *append_suffix(const char *m) {
