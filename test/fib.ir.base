@@ -37,13 +37,13 @@ printSequence:
   LE
   JF 19
   LOAD #1
-  STORE #2
-  LOAD #2
+  COPY
   CALL getFib
   FREE 1
   LOAD [ei]
-  STORE #3
-  LOAD #3
+  STORE #2
+  LOAD #2
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -53,7 +53,7 @@ printSequence:
   PUSH_D 1
   ADD
   ASSIGN
-  FREE 2
+  FREE 1
   JUMP -22
 main:
   PUSH_S compute
@@ -73,6 +73,7 @@ main:
   LOAD #2
   PUSH_S name
   ACCESS
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -83,21 +84,25 @@ main:
   PUSH_S compute
   ACCESS
   PUSH_D 10
+  COPY
   CALL -1
   FREE 2
   LOAD [ei]
   STORE #3
   PUSH_S "Result for 10th Fib:"
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD #3
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   PUSH_S "Running batch 1 to 5:"
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -108,6 +113,7 @@ main:
   PUSH_S runBatch
   ACCESS
   PUSH_D 10
+  COPY
   CALL -1
   FREE 2
   LOAD [ei]

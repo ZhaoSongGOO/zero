@@ -9,6 +9,7 @@ main:
   ADD
   STORE #3
   LOAD #3
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -19,6 +20,7 @@ main:
   MULTI
   ASSIGN
   LOAD #1
+  COPY
   CALL print
   FREE 1
   LOAD [ei]

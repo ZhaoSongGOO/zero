@@ -3,8 +3,9 @@ countdown:
   LOAD #-0
   PUSH_D 0
   G
-  JF 12
+  JF 14
   LOAD #-0
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -12,12 +13,14 @@ countdown:
   LOAD #-0
   PUSH_D 1
   MINUS
+  COPY
   CALL countdown
   FREE 1
   LOAD [ei]
   FREE 1
 main:
   PUSH_D 10
+  COPY
   CALL countdown
   FREE 1
   LOAD [ei]

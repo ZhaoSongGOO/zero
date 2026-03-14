@@ -3,12 +3,14 @@ __init__:
   STORE 0
 action:
   LOAD 0
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
 main:
   LOAD 0
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -16,6 +18,7 @@ main:
   PUSH_D 2
   STORE #1
   LOAD #1
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -23,6 +26,7 @@ main:
   PUSH_D 3
   STORE #2
   LOAD #2
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -30,18 +34,21 @@ main:
   PUSH_D 4
   STORE #3
   LOAD #3
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   FREE 1
   LOAD #2
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   FREE 1
   LOAD #1
+  COPY
   CALL print
   FREE 1
   LOAD [ei]

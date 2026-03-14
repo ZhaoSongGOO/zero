@@ -5,8 +5,9 @@ main:
   LOAD #1
   PUSH_D 0
   GE
-  JF 11
+  JF 12
   LOAD #1
+  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -16,4 +17,4 @@ main:
   PUSH_D 1
   MINUS
   ASSIGN
-  JUMP -14
+  JUMP -15

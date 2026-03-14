@@ -8,6 +8,7 @@ main:
   STORE #2
   FREE 1
   LOAD #1
+  COPY
   CALL print
   FREE 1
   LOAD [ei]

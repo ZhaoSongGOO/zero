@@ -2049,6 +2049,7 @@ void expression_call_visitor(struct syntax_expr *expr) {
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "COPY");
   }
   if (expr->data.call_expr.source_in_stack) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
@@ -2148,7 +2149,8 @@ typedef enum {
   I_FREE,
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
-  I_ACCESS
+  I_ACCESS,
+  I_COPY
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2243,6 +2245,7 @@ INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2270,6 +2273,7 @@ void init_actions() {
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
   map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
+  map_insert(actions, "COPY", NEW_COPY_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2415,57 +2419,6 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       target->data.ptr = v;
     }
     vm->stacks[value->data.i_val] = target;
-  }
-}
-
-ZValue *copy(ZValue *src) {
-  switch (src->type) {
-  case VAL_REF: {
-    ZValue *ref = (ZValue *)malloc(sizeof(ZValue));
-    ref->type = VAL_REF;
-    ref->data.ptr = copy((ZValue *)(src->data.ptr));
-    return ref;
-  } break;
-  case VAL_ARR_PTR: {
-    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-    data->type = VAL_ARR_PTR;
-    ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
-
-    ZArray *raw = (ZArray *)(src->data.ptr);
-    arr->length = raw->length;
-    arr->elements = (ZValue *)malloc(sizeof(ZValue) * raw->length);
-    for (int i = 0; i < arr->length; i++) {
-      ZValue *src = &(raw->elements[i]);
-      arr->elements[i] = copy((ZValue *)(src));
-    }
-    data->data.ptr = arr;
-    return data;
-  } break;
-  case VAL_OBJ_PTR: {
-    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-    data->type = VAL_OBJ_PTR;
-    ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
-    ZObject *raw = (ZObject *)(src->data.ptr);
-    obj->count = raw->count;
-    obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
-    for (int i = 0; i < obj->count; i++) {
-      obj->entries[i].key = raw->entries[i].key;
-      obj->entries[i].value = copy(raw->entries[i].value);
-    }
-    data->data.ptr = obj;
-    return data;
-  } break;
-  case VAL_INT:
-  case VAL_STR_INDEX:
-  case VAL_BOOL:
-  case VAL_FUNC:
-  case VAL_FLOAT:
-  case VAL_NULL:
-  case VAL_OFFSET:
-  case VAL_REGISTER:
-    return src;
-  default:
-    assert(false);
   }
 }
 
@@ -2738,7 +2691,7 @@ void print_data(VM *vm, ZValue *v) {
 void print_arr(VM *vm, ZArray *arr) {
   printf("[");
   for (int i = 0; i < arr->length; i++) {
-    print_data(vm, arr->elements + i);
+    print_data(vm, *(arr->elements + i));
     if (i != arr->length - 1) {
       printf(", ");
     }
@@ -2750,7 +2703,7 @@ void print_object(VM *vm, ZObject *obj) {
   printf("{");
   for (int i = 0; i < obj->count; i++) {
     printf("\"%s\":", obj->entries[i].key);
-    print_data(vm, &(obj->entries[i].value));
+    print_data(vm, obj->entries[i].value);
     if (i != obj->count - 1) {
       printf(", ");
     }
@@ -2863,6 +2816,62 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
+ZValue *copy(ZValue *src) {
+  switch (src->type) {
+  case VAL_REF: {
+    ZValue *ref = (ZValue *)malloc(sizeof(ZValue));
+    ref->type = VAL_REF;
+    ref->data.ptr = copy((ZValue *)(src->data.ptr));
+    return ref;
+  } break;
+  case VAL_ARR_PTR: {
+    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
+    data->type = VAL_ARR_PTR;
+    ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
+
+    ZArray *raw = (ZArray *)(src->data.ptr);
+    arr->length = raw->length;
+    arr->elements = (ZValue *)malloc(sizeof(ZValue) * raw->length);
+    for (int i = 0; i < arr->length; i++) {
+      ZValue *src = raw->elements[i];
+      arr->elements[i] = copy(src);
+    }
+    data->data.ptr = arr;
+    return data;
+  } break;
+  case VAL_OBJ_PTR: {
+    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
+    data->type = VAL_OBJ_PTR;
+    ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
+    ZObject *raw = (ZObject *)(src->data.ptr);
+    obj->count = raw->count;
+    obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
+    for (int i = 0; i < obj->count; i++) {
+      obj->entries[i].key = raw->entries[i].key;
+      obj->entries[i].value = copy(raw->entries[i].value);
+    }
+    data->data.ptr = obj;
+    return data;
+  } break;
+  case VAL_INT:
+  case VAL_STR_INDEX:
+  case VAL_BOOL:
+  case VAL_FUNC:
+  case VAL_FLOAT:
+  case VAL_NULL:
+  case VAL_OFFSET:
+  case VAL_REGISTER:
+    return src;
+  default:
+    assert(false);
+  }
+}
+
+void COPY_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *src = vm->stacks[vm->sp];
+  vm->stacks[vm->sp] = copy(src);
+}
+
 void ACCESS_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
@@ -2958,6 +2967,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       break;
     case I_JF:
       JF_INST_RUN(vm, inst->v);
+      break;
+    case I_COPY:
+      COPY_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -3231,6 +3243,10 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_ACCESS, NULL);
+}
+
+INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_COPY, NULL);
 }
 
 const char *append_suffix(const char *m) {
