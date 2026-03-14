@@ -2640,6 +2640,9 @@ void print_data(VM *vm, ZValue *v) {
   case VAL_REF:
     print_ref(vm, v);
     break;
+  case VAL_NULL:
+    printf("null");
+    break;
   default:
     break;
   }
