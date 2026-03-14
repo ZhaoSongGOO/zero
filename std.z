@@ -1,41 +1,37 @@
 /*
  * Zero Standard Library - Core Module
  * Version: 1.0.0
- * Description: Contains fundamental utility functions for value manipulation 
+ * Description: Contains fundamental utility functions for value manipulation
  * and basic arithmetic operations.
  */
 
 /*
  * Swaps the values of two variables.
- * Note: Since this is a function call, ensure your language supports 
+ * Note: Since this is a function call, ensure your language supports
  * pass-by-reference if you want the changes to reflect outside this scope.
  */
-func swap(a, b){
-    var c = a;
-    a = b;
-    b = c;
+func swap(a, b) {
+  var c = a;
+  a = b;
+  b = c;
 }
 
 var version = 100;
 
-func printVersion(){
-    print(version);
-}
+func printVersion() { print(version); }
 
 /*
  * Compares two numeric values and returns the greater one.
  */
-func max(a, b){
-    if(a > b){
-        return a;
-    }else{
-        return b;
-    }
+func max(a, b) {
+  if (a > b) {
+    return a;
+  } else {
+    return b;
+  }
 }
 
 /*
  * Returns the sum of two numbers.
  */
-func add(a, b){
-    return a + b;
-}
+func add(a, b) { return a + b; }
