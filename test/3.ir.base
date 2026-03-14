@@ -1,0 +1,19 @@
+__init__:
+main:
+  PUSH_D 10
+  STORE #1
+  LOAD #1
+  PUSH_D 0
+  GE
+  JF 11
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  LOAD #1
+  LOAD #1
+  PUSH_D 1
+  MINUS
+  ASSIGN
+  JUMP -14

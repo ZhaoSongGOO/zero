@@ -1,0 +1,25 @@
+__init__:
+main:
+  PUSH_D 10
+  STORE #1
+  PUSH_D 20
+  STORE #2
+  LOAD #1
+  LOAD #2
+  ADD
+  STORE #3
+  LOAD #3
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  LOAD #1
+  LOAD #1
+  PUSH_D 2
+  MULTI
+  ASSIGN
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
