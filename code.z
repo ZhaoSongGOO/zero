@@ -26,81 +26,12 @@ func action(name, num) {
  This is main Function
 */
 func main() {
-  var a = 1 + 2 * 3;
-  var b = (a + 2) * 3;
-  print(a);
-  print("Hello World");
-  var c = [ 1.3, 2, 3, a ];
 
-  print(c);
-
-  var e = false;
-
-  print(false);
-
-  print(true);
-
-  print(1 == 2);
-  print(1 != 2);
-  print(1 > 2);
-  print(1 <= 2);
-  print(a == 4);
-  sayHi();
-
-  var x = 1;
-  print(x + 1);
-  x = 2 * 3;
-  print(x + 1);
-
-  var first = 1;
-  var second = 2;
-  add(first, second);
-  print(first + 1);
-
-  var z = add(1, 2);
-  print(z * 2);
-
-  var i = 1;
-  var l = 2;
-  swap(i, l);
-  print(i * 1);
-  print(l * 1);
-  loop(99, 2);
-
-  var d = {"key" : 1, "address" : "abc"};
-  print(d.key);
-  print(d.address);
-
-  {
-    var d = 12;
-    print(d);
-  }
-
-  print(d);
-  print(version);
-  {
-    var version = 101;
-    print(version);
-    printVersion();
-  }
-  print(version);
-  var version = 1;
-  print(version);
-  print(printVersion());
-
-  print(feb(5));
 
   var human = {"run" : action};
-  human.run("Iam running", 5);
 
-  if (print(1)) {
-    print("return not null");
-  } else {
-    print("return null");
-  }
 
-  a = null;
-  print(a == null);
-  var ty;
-  print(ty == null);
+  var all = {"owner" : human};
+
+  all.owner.run("owner running", 3);
 }

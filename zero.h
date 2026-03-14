@@ -754,7 +754,7 @@ struct syntax_expr {
 
     struct {
       struct syntax_expr *obj;
-      const char *prop;
+      struct Vec *props;
     } access_expr;
 
     struct {
@@ -1470,16 +1470,20 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
           parser->cur_scope, id->data.identifier_expr.name);
     }
     if (parser->sc->cur_token.type == TOKEN_ACCESS) {
-      expected_token_type_and_run(parser->sc, TOKEN_ACCESS);
       struct syntax_expr *access_expr =
           (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
-      access_expr->type = EXPR_ACCESS;
-      struct token n = parser->sc->cur_token;
-      expected_token_type_and_run(parser->sc, TOKEN_ID);
-      access_expr->data.access_expr.prop =
-          parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)
-              ->str;
       access_expr->data.access_expr.obj = id;
+      access_expr->type = EXPR_ACCESS;
+      access_expr->data.access_expr.props = new_vec();
+      while (parser->sc->cur_token.type == TOKEN_ACCESS) {
+        expected_token_type_and_run(parser->sc, TOKEN_ACCESS);
+        struct token n = parser->sc->cur_token;
+        expected_token_type_and_run(parser->sc, TOKEN_ID);
+        access_expr->data.access_expr.props->push(
+            access_expr->data.access_expr.props,
+            parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)
+                ->str);
+      }
       return access_expr;
     }
     return id;
@@ -1936,9 +1940,12 @@ void expression_visitor(struct syntax_expr *expr) {
 void expression_access_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_ACCESS);
   expression_visitor(expr->data.access_expr.obj);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s",
-                   expr->data.access_expr.prop);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ACCESS");
+  for (int i = 0; i < expr->data.access_expr.props->count; i++) {
+    const char *prop =
+        expr->data.access_expr.props->get(expr->data.access_expr.props, i);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", prop);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ACCESS");
+  }
   // TODO: support pass this ptr, may be use.
   // expression_visitor(expr->data.access_expr.obj);
 }
@@ -2305,6 +2312,7 @@ const Map *GET_ACTIONS() {
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
   ZFunction *f = new_function();
+  f->name = pair->key;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
     char *inst_str = store->get(store, i)->str;
@@ -2679,6 +2687,10 @@ void print_data(VM *vm, ZValue *v) {
   case VAL_NULL:
     printf("null");
     break;
+  case VAL_FUNC: {
+    ZFunction *f = (ZFunction *)v->data.ptr;
+    printf("[FUNCTION %s]", f->name);
+  } break;
   default:
     break;
   }
