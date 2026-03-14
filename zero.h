@@ -2534,6 +2534,8 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
     return v->data.b_val;
   } else if (v->type == VAL_REF) {
     return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
+  } else if (v->type == VAL_NULL) {
+    return 0;
   } else {
     assert(false);
   }
@@ -2764,6 +2766,8 @@ bool is_true(VM *vm, ZValue *value) {
     return value->data.f_val;
   case VAL_INT:
     return value->data.i_val;
+  case VAL_NULL:
+    return false;
   default:
     return is_true(vm, (ZValue *)(value->data.ptr));
   }

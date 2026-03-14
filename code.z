@@ -92,4 +92,10 @@ func main() {
 
   var human = {"run" : action};
   human.run("Iam running", 5);
+
+  if (print(1)) {
+    print("return not null");
+  } else {
+    print("return null");
+  }
 }
