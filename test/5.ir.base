@@ -1,0 +1,24 @@
+__init__:
+countdown:
+  LOAD #-0
+  PUSH_D 0
+  G
+  JF 12
+  LOAD #-0
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  LOAD #-0
+  PUSH_D 1
+  MINUS
+  CALL countdown
+  FREE 1
+  LOAD [ei]
+  POP
+main:
+  PUSH_D 10
+  CALL countdown
+  FREE 1
+  LOAD [ei]
+  POP
