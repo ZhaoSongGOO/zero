@@ -1,0 +1,114 @@
+__init__:
+getFib:
+  PUSH_D 0
+  STORE #1
+  PUSH_D 1
+  STORE #2
+  PUSH_D 0
+  STORE #3
+  LOAD #-0
+  PUSH_D 0
+  G
+  JF 17
+  LOAD #3
+  LOAD #1
+  LOAD #2
+  ADD
+  ASSIGN
+  LOAD #1
+  LOAD #2
+  ASSIGN
+  LOAD #2
+  LOAD #3
+  ASSIGN
+  LOAD #-0
+  LOAD #-0
+  PUSH_D 1
+  MINUS
+  ASSIGN
+  JUMP -20
+  LOAD #1
+  STORE [ei]
+printSequence:
+  PUSH_D 1
+  STORE #1
+  LOAD #1
+  LOAD #-0
+  LE
+  JF 19
+  LOAD #1
+  STORE #2
+  LOAD #2
+  CALL getFib
+  FREE 1
+  LOAD [ei]
+  STORE #3
+  LOAD #3
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  LOAD #1
+  PUSH_D 1
+  ADD
+  ASSIGN
+  FREE 2
+  JUMP -22
+main:
+  PUSH_S compute
+  LOAD .getFib
+  PUSH_S runBatch
+  LOAD .printSequence
+  PUSH_D 2
+  CALL NEW_OBJECT
+  STORE #1
+  PUSH_S name
+  PUSH_S "Zero Fibonacci Tool"
+  PUSH_S engine
+  LOAD #1
+  PUSH_D 2
+  CALL NEW_OBJECT
+  STORE #2
+  LOAD #2
+  PUSH_S name
+  ACCESS
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  PUSH_S engine
+  ACCESS
+  PUSH_S compute
+  ACCESS
+  PUSH_D 10
+  CALL -1
+  FREE 2
+  LOAD [ei]
+  STORE #3
+  PUSH_S "Result for 10th Fib:"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #3
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  PUSH_S "Running batch 1 to 5:"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  PUSH_S engine
+  ACCESS
+  PUSH_S runBatch
+  ACCESS
+  PUSH_D 10
+  CALL -1
+  FREE 2
+  LOAD [ei]
+  FREE 1

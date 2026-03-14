@@ -2114,12 +2114,12 @@ typedef struct {
 
 typedef struct {
   int length;
-  ZValue *elements;
+  ZValue **elements;
 } ZArray;
 
 typedef struct {
   const char *key;
-  ZValue value;
+  ZValue *value;
 } ZPair;
 
 typedef struct {
@@ -2415,6 +2415,57 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       target->data.ptr = v;
     }
     vm->stacks[value->data.i_val] = target;
+  }
+}
+
+ZValue *copy(ZValue *src) {
+  switch (src->type) {
+  case VAL_REF: {
+    ZValue *ref = (ZValue *)malloc(sizeof(ZValue));
+    ref->type = VAL_REF;
+    ref->data.ptr = copy((ZValue *)(src->data.ptr));
+    return ref;
+  } break;
+  case VAL_ARR_PTR: {
+    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
+    data->type = VAL_ARR_PTR;
+    ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
+
+    ZArray *raw = (ZArray *)(src->data.ptr);
+    arr->length = raw->length;
+    arr->elements = (ZValue *)malloc(sizeof(ZValue) * raw->length);
+    for (int i = 0; i < arr->length; i++) {
+      ZValue *src = &(raw->elements[i]);
+      arr->elements[i] = copy((ZValue *)(src));
+    }
+    data->data.ptr = arr;
+    return data;
+  } break;
+  case VAL_OBJ_PTR: {
+    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
+    data->type = VAL_OBJ_PTR;
+    ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
+    ZObject *raw = (ZObject *)(src->data.ptr);
+    obj->count = raw->count;
+    obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
+    for (int i = 0; i < obj->count; i++) {
+      obj->entries[i].key = raw->entries[i].key;
+      obj->entries[i].value = copy(raw->entries[i].value);
+    }
+    data->data.ptr = obj;
+    return data;
+  } break;
+  case VAL_INT:
+  case VAL_STR_INDEX:
+  case VAL_BOOL:
+  case VAL_FUNC:
+  case VAL_FLOAT:
+  case VAL_NULL:
+  case VAL_OFFSET:
+  case VAL_REGISTER:
+    return src;
+  default:
+    assert(false);
   }
 }
 
@@ -2736,11 +2787,11 @@ void new_array(VM *vm) {
   data->type = VAL_ARR_PTR;
   ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
   arr->length = count->data.i_val;
-  arr->elements = (ZValue *)malloc(sizeof(ZValue) * arr->length);
+  arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
   for (int i = 0; i < arr->length; i++) {
     ZValue *src = vm->stacks[vm->sp - arr->length + 1 + i];
-    arr->elements[i].type = src->type;
-    arr->elements[i].data = src->data;
+    arr->elements[i] = (ZValue *)malloc(sizeof(ZValue));
+    arr->elements[i] = src;
   }
   data->data.ptr = arr;
   vm->sp -= arr->length - 1;
@@ -2761,8 +2812,8 @@ void new_object(VM *vm) {
     assert(key->type == VAL_STR_INDEX);
     ZValue *value = vm->stacks[stack_base + i * 2 + 2];
     arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
-    arr->entries[i].value.type = value->type;
-    arr->entries[i].value.data = value->data;
+    arr->entries[i].value = (ZValue *)malloc(sizeof(ZValue));
+    arr->entries[i].value = value;
   }
   data->data.ptr = arr;
   vm->sp -= arr->count * 2 - 1;
@@ -2823,7 +2874,7 @@ void ACCESS_INST_RUN(VM *vm, ZValue *value) {
   const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   for (int i = 0; i < raw_obj->count; i++) {
     if (strcmp(raw_obj->entries[i].key, key) == 0) {
-      vm->stacks[--(vm->sp)] = &(raw_obj->entries[i].value);
+      vm->stacks[--(vm->sp)] = raw_obj->entries[i].value;
       return;
     }
   }
