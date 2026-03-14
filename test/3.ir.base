@@ -7,7 +7,6 @@ main:
   GE
   JF 12
   LOAD #1
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -17,4 +16,5 @@ main:
   PUSH_D 1
   MINUS
   ASSIGN
+  STORE #1
   JUMP -15

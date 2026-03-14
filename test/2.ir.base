@@ -5,7 +5,6 @@ __init__:
   STORE 1
 sayHi:
   PUSH_S "hi"
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -18,7 +17,6 @@ loop:
   LOAD #-0
   PUSH_D 1
   MULTI
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -28,6 +26,7 @@ loop:
   PUSH_D 1
   MINUS
   ASSIGN
+  STORE #-1
   JUMP -17
 action:
   LOAD #-1
@@ -35,7 +34,6 @@ action:
   G
   JF 12
   LOAD #-0
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -45,6 +43,7 @@ action:
   PUSH_D 1
   MINUS
   ASSIGN
+  STORE #-1
   JUMP -15
 main:
   PUSH_D 1
@@ -60,13 +59,11 @@ main:
   MULTI
   STORE #2
   LOAD #1
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   PUSH_S "Hello World"
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -79,7 +76,6 @@ main:
   CALL NEW_ARRAY
   STORE #3
   LOAD #3
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -87,13 +83,11 @@ main:
   PUSH_B 0
   STORE #4
   PUSH_B 0
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   PUSH_B 1
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -101,7 +95,6 @@ main:
   PUSH_D 1
   PUSH_D 2
   E
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -109,7 +102,6 @@ main:
   PUSH_D 1
   PUSH_D 2
   NE
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -117,7 +109,6 @@ main:
   PUSH_D 1
   PUSH_D 2
   G
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -125,7 +116,6 @@ main:
   PUSH_D 1
   PUSH_D 2
   LE
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -133,7 +123,6 @@ main:
   LOAD #1
   PUSH_D 4
   E
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -147,7 +136,6 @@ main:
   LOAD #5
   PUSH_D 1
   ADD
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -157,10 +145,10 @@ main:
   PUSH_D 3
   MULTI
   ASSIGN
+  STORE #5
   LOAD #5
   PUSH_D 1
   ADD
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -170,9 +158,7 @@ main:
   PUSH_D 2
   STORE #7
   LOAD #7
-  COPY
   LOAD #6
-  COPY
   CALL add
   FREE 2
   LOAD [ei]
@@ -180,15 +166,12 @@ main:
   LOAD #6
   PUSH_D 1
   ADD
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   PUSH_D 2
-  COPY
   PUSH_D 1
-  COPY
   CALL add
   FREE 2
   LOAD [ei]
@@ -196,7 +179,6 @@ main:
   LOAD #8
   PUSH_D 2
   MULTI
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -206,9 +188,7 @@ main:
   PUSH_D 2
   STORE #10
   LOAD #10
-  COPY
   LOAD #9
-  COPY
   CALL swap
   FREE 2
   LOAD [ei]
@@ -216,7 +196,6 @@ main:
   LOAD #9
   PUSH_D 1
   MULTI
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -224,15 +203,12 @@ main:
   LOAD #10
   PUSH_D 1
   MULTI
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   PUSH_D 2
-  COPY
   PUSH_D 99
-  COPY
   CALL loop
   FREE 2
   LOAD [ei]
@@ -247,7 +223,6 @@ main:
   LOAD #11
   PUSH_S key
   ACCESS
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -255,7 +230,6 @@ main:
   LOAD #11
   PUSH_S address
   ACCESS
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -263,20 +237,17 @@ main:
   PUSH_D 12
   STORE #12
   LOAD #12
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   FREE 1
   LOAD #11
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD 1
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -284,7 +255,6 @@ main:
   PUSH_D 101
   STORE #12
   LOAD #12
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -295,7 +265,6 @@ main:
   FREE 1
   FREE 1
   LOAD 1
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -303,7 +272,6 @@ main:
   PUSH_D 1
   STORE #12
   LOAD #12
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -311,17 +279,14 @@ main:
   CALL printVersion
   FREE 0
   LOAD [ei]
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   PUSH_D 5
-  COPY
   CALL feb
   FREE 1
   LOAD [ei]
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -335,28 +300,23 @@ main:
   PUSH_S run
   ACCESS
   PUSH_D 5
-  COPY
   PUSH_S "Iam running"
-  COPY
   CALL -2
   FREE 3
   LOAD [ei]
   FREE 1
   PUSH_D 1
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
-  JF 7
+  JF 6
   PUSH_S "return not null"
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
-  JUMP 6
+  JUMP 5
   PUSH_S "return null"
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -364,10 +324,10 @@ main:
   LOAD #1
   PUSH_N
   ASSIGN
+  STORE #1
   LOAD #1
   PUSH_N
   E
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -377,7 +337,6 @@ main:
   LOAD #14
   PUSH_N
   E
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -388,13 +347,11 @@ main:
   CALL NEW_OBJECT
   STORE #15
   LOAD #15
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD .action
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -404,7 +361,6 @@ main:
   ACCESS
   PUSH_S run
   ACCESS
-  COPY
   CALL print
   FREE 1
   LOAD [ei]
@@ -415,9 +371,7 @@ main:
   PUSH_S run
   ACCESS
   PUSH_D 3
-  COPY
   PUSH_S "owner running"
-  COPY
   CALL -2
   FREE 3
   LOAD [ei]

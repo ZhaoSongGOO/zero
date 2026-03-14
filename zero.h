@@ -2007,9 +2007,26 @@ void expression_binary_visitor(struct syntax_expr *expr) {
   case TOKEN_LESS_EQUAL:
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LE");
     break;
-  case TOKEN_ASSIGN:
+  case TOKEN_ASSIGN: {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ASSIGN");
-    break;
+    if (expr->data.binary_expr.left->data.identifier_expr.is_from_top) {
+      INSTRUCTION_SAVE(
+          CURRENT_FUNCTION_NAME, "STORE %d",
+          expr->data.binary_expr.left->data.identifier_expr.var_index);
+    } else {
+      if (expr->data.binary_expr.left->data.identifier_expr.from_params) {
+        INSTRUCTION_SAVE(
+            CURRENT_FUNCTION_NAME, "STORE #-%d",
+            expr->data.binary_expr.left->data.identifier_expr.offset);
+      } else {
+        INSTRUCTION_SAVE(
+            CURRENT_FUNCTION_NAME, "STORE #%d",
+            expr->data.binary_expr.left->data.identifier_expr.var_index + 1);
+      }
+    }
+  }
+
+  break;
   default:
     assert(false);
   }
@@ -2049,7 +2066,6 @@ void expression_call_visitor(struct syntax_expr *expr) {
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "COPY");
   }
   if (expr->data.call_expr.source_in_stack) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
@@ -2149,8 +2165,7 @@ typedef enum {
   I_FREE,
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
-  I_ACCESS,
-  I_COPY
+  I_ACCESS
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2245,7 +2260,6 @@ INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
-INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2273,7 +2287,6 @@ void init_actions() {
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
   map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
-  map_insert(actions, "COPY", NEW_COPY_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2382,76 +2395,69 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
   if (value->type == VAL_REGISTER) {
     map_insert(vm->registers, (const char *)(value->data.ptr), v);
   } else if (value->type == VAL_OFFSET) {
-    // printf("STORE---> %ld\n", v);
     /*
     When loading a reference-type data, the consumer should directly resolve or
     access the actual value being referenced, rather than the reference object
     itself.
     */
-    // if (v->type == VAL_REF) {
-    //   value->data.ptr = v->data.ptr;
-    // } else {
-    //   value->data.ptr = v;
-    // }
-    if (value->type == VAL_OFFSET) {
-      int target_position = value->data.i_val + vm->cur_context->bp;
-      if (vm->sp < target_position) {
-        vm->sp = target_position;
-      }
-      ZValue *target = (ZValue *)malloc(sizeof(ZValue));
-      target->type = VAL_REF;
+    int target_position = value->data.i_val + vm->cur_context->bp;
+    // is new variable store,
+    if (vm->sp < target_position) {
+      vm->sp = target_position;
       if (v->type == VAL_REF) {
+        ZValue *target = (ZValue *)malloc(sizeof(ZValue));
+        target->type = VAL_REF;
         target->data.ptr = v->data.ptr;
+        vm->stacks[target_position] = target;
       } else {
-        target->data.ptr = v;
+        vm->stacks[target_position] = v;
       }
-      vm->stacks[target_position] = target;
+    } else {
+      ZValue *target = vm->stacks[target_position];
+      if (target->type == VAL_REF) {
+        if (v->type == VAL_REF) {
+          target->data.ptr = v->data.ptr;
+        } else {
+          target->data.ptr = v;
+        }
+      } else {
+        vm->stacks[target_position] = v;
+      }
     }
+
   } else {
     if (vm->sp < value->data.i_val) {
       vm->sp = value->data.i_val;
     }
-    ZValue *target = (ZValue *)malloc(sizeof(ZValue));
-    target->type = VAL_REF;
+
     if (v->type == VAL_REF) {
+      ZValue *target = (ZValue *)malloc(sizeof(ZValue));
+      target->type = VAL_REF;
       target->data.ptr = v->data.ptr;
+      vm->stacks[value->data.i_val] = target;
     } else {
-      target->data.ptr = v;
+      vm->stacks[value->data.i_val] = v;
     }
-    vm->stacks[value->data.i_val] = target;
   }
 }
 
 void LOAD_INST_RUN(VM *vm, ZValue *value) {
   // printf("LOAD---> %ld\n", value);
+  /*
+    VAL_OFFSET: load value by bp and offset;
+    target_index = bp + offset;
+  */
   if (value->type == VAL_OFFSET) {
     int offset = value->data.i_val;
     ZValue *src = vm->stacks[vm->cur_context->bp + offset];
-    if (src->type == VAL_REF) {
-      vm->stacks[++vm->sp] = src;
-    } else {
-      ZValue *zref = (ZValue *)malloc(sizeof(ZValue));
-      zref->type = VAL_REF;
-      zref->data.ptr = src;
-      /*
-        When a function argument is a literal, such as f(1);, any reference
-        operation performed on that input within function f will cause its type
-        on the stack to be converted to VAL_REF.
-
-        ```
-          func main(){
-            show(2);
-          }
-
-          func show(a){
-            a = 1;
-            print(a); // expected 1
-          }
-        ```
-      */
-      vm->stacks[vm->cur_context->bp + offset] = zref;
-      vm->stacks[++vm->sp] = zref;
-    }
+    // if (src->type == VAL_REF) {
+    vm->stacks[++vm->sp] = src;
+    // } else {
+    //   ZValue *zvalue = (ZValue *)malloc(sizeof(ZValue));
+    //   zvalue->type = src->type;
+    //   zvalue->data = src->data;
+    //   vm->stacks[++vm->sp] = zvalue;
+    // }
   } else if (value->type == VAL_REGISTER) {
     MapPair *rv = map_get(vm->registers, (const char *)(value->data.ptr));
     if (rv->value != NULL) {
@@ -2463,6 +2469,11 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
       vm->stacks[++vm->sp] = v;
     }
   } else if (value->type == VAL_INT) {
+    /*
+      VAL_INT
+      load value from base offset,
+      target_index = offset;
+    */
     int offset = value->data.i_val;
     vm->stacks[++vm->sp] = vm->stacks[offset];
   } else {
@@ -2632,13 +2643,7 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
 
 void ASSIGN_INST_RUN(VM *vm, ZValue *value) {
   ZValue *source = vm->stacks[vm->sp--];
-  ZValue *target = vm->stacks[vm->sp--];
-  assert(target->type == VAL_REF);
-  if (source->type != VAL_REF) {
-    target->data.ptr = source;
-  } else {
-    target->data.ptr = source->data.ptr;
-  }
+  vm->stacks[vm->sp] = source;
 }
 
 void DIV_INST_RUN(VM *vm, ZValue *value) {
@@ -2748,7 +2753,10 @@ void new_array(VM *vm) {
   }
   data->data.ptr = arr;
   vm->sp -= arr->length - 1;
-  vm->stacks[vm->sp] = data;
+  ZValue *i = (ZValue *)malloc(sizeof(ZValue));
+  i->type = VAL_REF;
+  i->data.ptr = data;
+  vm->stacks[vm->sp] = i;
 }
 
 void new_object(VM *vm) {
@@ -2770,7 +2778,10 @@ void new_object(VM *vm) {
   }
   data->data.ptr = arr;
   vm->sp -= arr->count * 2 - 1;
-  vm->stacks[vm->sp] = data;
+  ZValue *i = (ZValue *)malloc(sizeof(ZValue));
+  i->type = VAL_REF;
+  i->data.ptr = data;
+  vm->stacks[vm->sp] = i;
 }
 
 void call_builtin_function(VM *vm, ZFunction *func) {
@@ -2967,9 +2978,6 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       break;
     case I_JF:
       JF_INST_RUN(vm, inst->v);
-      break;
-    case I_COPY:
-      COPY_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -3243,10 +3251,6 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_ACCESS, NULL);
-}
-
-INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value) {
-  return new_inst(I_COPY, NULL);
 }
 
 const char *append_suffix(const char *m) {
