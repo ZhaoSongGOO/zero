@@ -1877,9 +1877,8 @@ void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
                      statement->data.var_stmt.var_index);
   } else {
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
-                     statement->data.var_stmt.var_index +
-                         GLOBAL_PARSER->root_scope->top_var_count);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE #%d",
+                     statement->data.var_stmt.var_index + 1);
   }
 }
 void statement_stmt_expr_visitor(struct syntax_statement *statement) {
@@ -1902,9 +1901,8 @@ void expression_visitor(struct syntax_expr *expr) {
           INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
                            expr->data.identifier_expr.var_index);
         } else {
-          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d",
-                           expr->data.identifier_expr.var_index +
-                               GLOBAL_PARSER->root_scope->top_var_count);
+          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d",
+                           expr->data.identifier_expr.var_index + 1); // bp+d
         }
       }
     }
