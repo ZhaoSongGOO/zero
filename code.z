@@ -13,6 +13,13 @@ func loop(a, b) {
   }
 }
 
+func action(name, num) {
+  while (num > 0) {
+    print(name);
+    num = num - 1;
+  }
+}
+
 // This is main Function
 
 /*
@@ -82,4 +89,7 @@ func main() {
   print(printVersion());
 
   print(feb(5));
+
+  var human = {"run" : action};
+  human.run("Iam running", 5);
 }

@@ -743,7 +743,8 @@ struct syntax_expr {
       int offset;
       char *name;
       int var_index;
-      bool is_from_top;
+      bool is_from_top;     // if var defined from global.
+      bool may_be_function; // {"a":f}, `f` may be a function.
     } identifier_expr;
 
     struct {
@@ -1421,6 +1422,7 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     struct syntax_expr *id =
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
     id->type = EXPR_ID;
+    id->data.identifier_expr.may_be_function = false;
     id->data.identifier_expr.from_params = false;
     id->data.identifier_expr.name =
         parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
@@ -1431,8 +1433,10 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
     if (variable_define_from_params == NULL &&
         variable_define_form_var == NULL &&
         parser->sc->cur_token.type != TOKEN_LEFT_PARENT) {
-      printf("Variable(%s) not defined\n", id->data.identifier_expr.name);
-      assert(false);
+      // printf("Variable(%s) not defined, but may be a function?\n",
+      //        id->data.identifier_expr.name);
+      id->data.identifier_expr.may_be_function = true;
+      return id;
     }
     if (variable_define_from_params != NULL) {
       id->data.identifier_expr.from_params = true;
@@ -1865,17 +1869,22 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
   case EXPR_ID: {
-    if (expr->data.identifier_expr.from_params) {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
-                       expr->data.identifier_expr.offset);
+    if (expr->data.identifier_expr.may_be_function) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD .%s", // function name
+                       expr->data.identifier_expr.name);
     } else {
-      if (expr->data.identifier_expr.is_from_top) {
-        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
-                         expr->data.identifier_expr.var_index);
+      if (expr->data.identifier_expr.from_params) {
+        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
+                         expr->data.identifier_expr.offset);
       } else {
-        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d",
-                         expr->data.identifier_expr.var_index +
-                             GLOBAL_PARSER->root_scope->top_var_count);
+        if (expr->data.identifier_expr.is_from_top) {
+          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
+                           expr->data.identifier_expr.var_index);
+        } else {
+          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d",
+                           expr->data.identifier_expr.var_index +
+                               GLOBAL_PARSER->root_scope->top_var_count);
+        }
       }
     }
   } break;
@@ -2014,7 +2023,6 @@ void expression_call_visitor(struct syntax_expr *expr) {
   if (expr->data.call_expr.source_in_stack) {
     expression_visitor(expr->data.call_expr.source);
   }
-
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
@@ -2430,9 +2438,11 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
       v->type = VAL_NULL;
       vm->stacks[++vm->sp] = v;
     }
-  } else {
+  } else if (value->type == VAL_INT) {
     int offset = value->data.i_val;
     vm->stacks[++vm->sp] = vm->stacks[offset];
+  } else {
+    vm->stacks[++vm->sp] = value;
   }
 }
 
@@ -3021,6 +3031,11 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     name[content_len] = '\0';
     zv->data.ptr = name;
     return new_inst(I_LOAD, zv);
+  } else if (value[0] == '.') {
+    MapPair *pair = map_get(vm->symbols, value + 1);
+    assert(pair != NULL);
+    ZValue *f = (ZValue *)(pair->value);
+    return new_inst(I_LOAD, f);
   } else {
     int offset = (int)strtod(value, NULL);
     ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
