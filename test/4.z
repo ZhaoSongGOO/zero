@@ -1,0 +1,19 @@
+var a = 1;
+
+func action() { print(a); }
+
+func main() {
+  print(a);
+  var a = 2;
+  print(a);
+  {
+    var a = 3;
+    print(a);
+    {
+      var a = 4;
+      print(a);
+    }
+    print(a);
+  }
+  print(a);
+}

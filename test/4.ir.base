@@ -1,0 +1,48 @@
+__init__:
+  PUSH_D 1
+  STORE 0
+action:
+  LOAD 0
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+main:
+  LOAD 0
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  PUSH_D 2
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  PUSH_D 3
+  STORE #2
+  LOAD #2
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  PUSH_D 4
+  STORE #3
+  LOAD #3
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  SET 1
+  LOAD #2
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
+  SET 0
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  POP
