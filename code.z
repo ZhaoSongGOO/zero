@@ -98,4 +98,9 @@ func main() {
   } else {
     print("return null");
   }
+
+  a = null;
+  print(a == null);
+  var ty;
+  print(ty == null);
 }

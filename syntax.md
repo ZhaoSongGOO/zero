@@ -22,7 +22,7 @@ func_define = "func" string"("[params]")" "{" {statement} "}";
 
 params = identifier {"," identifier} ;
 
-var_decl   = "var" identifier "=" expression ;
+var_decl   = "var" identifier ["=" expression] ;
 
 expr_stmt  = expression ; 
 
@@ -55,7 +55,7 @@ factor     = [ "!" | "-" ] primary_call ;
 # level 8
 primary_call = primary { "(" [ arg_list ] ")" };
 
-primary    = identifier {"." string} | number | string | bool |array_list | object_list | "(" expression ")" ;
+primary    = identifier {"." string} | number | string | bool |array_list | object_list | null | "(" expression ")" ;
 
 arg_list   = expression { "," expression } ;
 

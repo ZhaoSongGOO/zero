@@ -32,6 +32,7 @@ typedef enum {
   TOKEN_ELSE,
   TOKEN_WHILE,
   TOKEN_INCLUDE,
+  TOKEN_NULL,
   TOKEN_EQUAL,         // ==
   TOKEN_NOT_EQUAL,     // !=
   TOKEN_AND,           // &&
@@ -223,7 +224,7 @@ bool is_keyword(const char *str) {
          strcmp(str, "false") == 0 || strcmp(str, "func") == 0 ||
          strcmp(str, "return") == 0 || strcmp(str, "if") == 0 ||
          strcmp(str, "else") == 0 || strcmp(str, "while") == 0 ||
-         strcmp(str, "include") == 0;
+         strcmp(str, "include") == 0 || strcmp(str, "null") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -266,6 +267,10 @@ struct token scanner_letter(struct scanner *s) {
 
     if (strcmp(str, "include") == 0) {
       return (struct token){.type = TOKEN_INCLUDE};
+    }
+
+    if (strcmp(str, "null") == 0) {
+      return (struct token){.type = TOKEN_NULL};
     }
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
@@ -753,7 +758,7 @@ struct syntax_expr {
     } access_expr;
 
     struct {
-      enum { LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL } kind;
+      enum { LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL, LIT_NULL } kind;
 
       union {
         int32_t int_val;
@@ -1130,13 +1135,21 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
       parser->sc->symbol
           ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
           ->str;
-  expected_token_type_and_run(parser->sc, TOKEN_ID);
-  expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
-  struct syntax_expr *expr = parser_expr(parser);
   struct syntax_statement *statement =
       (struct syntax_statement *)malloc(sizeof(struct syntax_statement));
   statement->type = STMT_VAR_DECL;
-  statement->data.var_stmt.initializer = expr;
+  expected_token_type_and_run(parser->sc, TOKEN_ID);
+  if (parser->sc->cur_token.type == TOKEN_ASSIGN) {
+    expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
+    struct syntax_expr *expr = parser_expr(parser);
+    statement->data.var_stmt.initializer = expr;
+  } else {
+    struct syntax_expr *null =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    null->type = EXPR_LITERAL;
+    null->data.literal_expr.kind = LIT_NULL;
+    statement->data.var_stmt.initializer = null;
+  }
   statement->data.var_stmt.name = id_name;
   if (parser->cur_scope->is_top_scope) {
     if (map_get(parser->cur_scope->variables, id_name) == NULL) {
@@ -1404,6 +1417,14 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
       number->data.literal_expr.bool_val = n.value.number_value.bool_value;
     }
     return number;
+  }
+  case TOKEN_NULL: {
+    expected_token_type_and_run(parser->sc, TOKEN_NULL);
+    struct syntax_expr *null =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    null->type = EXPR_LITERAL;
+    null->data.literal_expr.kind = LIT_NULL;
+    return null;
   }
   case TOKEN_STRING: {
     struct token n = parser->sc->cur_token;
@@ -1944,6 +1965,9 @@ void expression_literal_visitor(struct syntax_expr *expr) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_B %d",
                      expr->data.literal_expr.bool_val);
     break;
+  case LIT_NULL:
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_N");
+    break;
   default:
     assert(false);
   }
@@ -2203,6 +2227,7 @@ INSTRUCTION *NEW_PUSH_D_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_PUSH_F_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_PUSH_N_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_ADD_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_MINUS_INSTRUCTION(VM *vm, const char *value);
@@ -2231,6 +2256,7 @@ void init_actions() {
   map_insert(actions, "PUSH_F", NEW_PUSH_F_INSTRUCTION);
   map_insert(actions, "PUSH_B", NEW_PUSH_B_INSTRUCTION);
   map_insert(actions, "PUSH_S", NEW_PUSH_S_INSTRUCTION);
+  map_insert(actions, "PUSH_N", NEW_PUSH_N_INSTRUCTION);
   map_insert(actions, "CALL", NEW_CALL_INSTRUCTION);
   map_insert(actions, "ADD", NEW_ADD_INSTRUCTION);
   map_insert(actions, "MINUS", NEW_MINUS_INSTRUCTION);
@@ -3075,6 +3101,12 @@ INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
   v->type = VAL_STR_INDEX;
   vm->cvalues->push(vm->cvalues, value);
   v->data.i_val = vm->cvalues->count - 1;
+  return new_inst(I_PUSH, v);
+}
+
+INSTRUCTION *NEW_PUSH_N_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_NULL;
   return new_inst(I_PUSH, v);
 }
 
