@@ -743,6 +743,7 @@ struct syntax_expr {
       int offset;
       char *name;
       int var_index;
+      bool is_from_top;
     } identifier_expr;
 
     struct {
@@ -851,12 +852,18 @@ struct parser_scope {
   Map *variables;
   Map *params;
   int var_min_index;
+  bool is_top_scope;
+  bool is_root_scope;
+  int top_var_count;
 };
 
 struct Parser {
   struct scanner *sc;
   struct parser_scope *cur_scope;
+  struct parser_scope *root_scope;
 };
+
+static struct Parser *GLOBAL_PARSER = NULL;
 
 struct parser_scope *new_parser_scope() {
   struct parser_scope *psp =
@@ -865,19 +872,34 @@ struct parser_scope *new_parser_scope() {
   psp->variables = new_map();
   psp->params = new_map();
   psp->var_min_index = -1;
+  psp->is_top_scope = false;
+  psp->is_root_scope = false;
+  psp->top_var_count = 0;
   return psp;
 }
 
-struct Parser *parser_init(const char *source_name) {
+struct Parser *parser_init() {
+  struct Parser *p = (struct Parser *)malloc(sizeof(struct Parser));
+  p->sc = NULL;
+  p->root_scope = new_parser_scope();
+  p->root_scope->is_root_scope = true;
+  p->cur_scope = p->root_scope;
+  return p;
+}
+
+struct Parser *parser_reload(struct Parser *parser, const char *source_name) {
   struct source *s = read_source(source_name);
 
   if (s == NULL) {
-    printf("file `$s not found", source_name);
+    printf("file %s not found", source_name);
   }
-  struct Parser *p = (struct Parser *)malloc(sizeof(struct Parser));
-  p->sc = scanner_init(s);
-  p->cur_scope = new_parser_scope();
-  return p;
+  parser->cur_scope = parser->root_scope;
+  parser->sc = scanner_init(s);
+  struct parser_scope *psp = new_parser_scope();
+  psp->is_top_scope = true;
+  psp->parent = parser->cur_scope;
+  parser->cur_scope = psp;
+  return parser;
 }
 
 struct syntax_statement *parser_var_decl_stmt(struct Parser *parser);
@@ -1094,7 +1116,7 @@ struct syntax_statement *parser_ret_stmt(struct Parser *parser) {
 
 int get_var_index(struct parser_scope *scope) {
   int index = 0;
-  while (scope != NULL) {
+  while (scope != NULL && !scope->is_top_scope) {
     index += scope->variables->count;
     scope = scope->parent;
   }
@@ -1115,19 +1137,33 @@ struct syntax_statement *parser_var_decl_stmt(struct Parser *parser) {
   statement->type = STMT_VAR_DECL;
   statement->data.var_stmt.initializer = expr;
   statement->data.var_stmt.name = id_name;
-  statement->data.var_stmt.var_index = get_var_index(parser->cur_scope);
-  if (map_get(parser->cur_scope->variables, id_name) == NULL &&
-      map_get(parser->cur_scope->params, id_name) == NULL) {
-    int index = statement->data.var_stmt.var_index;
-    map_insert(parser->cur_scope->variables, id_name, (void *)index);
-    if (index < parser->cur_scope->var_min_index ||
-        parser->cur_scope->var_min_index == -1) {
-      parser->cur_scope->var_min_index = index;
+  if (parser->cur_scope->is_top_scope) {
+    if (map_get(parser->cur_scope->variables, id_name) == NULL) {
+      statement->data.var_stmt.var_index = parser->root_scope->top_var_count++;
+      map_insert(parser->cur_scope->variables, id_name,
+                 (void *)statement->data.var_stmt.var_index);
+      // printf("insert %s  in %d\n", id_name,
+      // statement->data.var_stmt.var_index);
+    } else {
+      printf("variable(%s) redefine\n", id_name);
+      assert(false);
     }
   } else {
-    printf("variable(%s) redefine\n", id_name);
-    assert(false);
+    if (map_get(parser->cur_scope->variables, id_name) == NULL &&
+        map_get(parser->cur_scope->params, id_name) == NULL) {
+      statement->data.var_stmt.var_index = get_var_index(parser->cur_scope);
+      int index = statement->data.var_stmt.var_index;
+      map_insert(parser->cur_scope->variables, id_name, (void *)index);
+      if (index < parser->cur_scope->var_min_index ||
+          parser->cur_scope->var_min_index == -1) {
+        parser->cur_scope->var_min_index = index;
+      }
+    } else {
+      printf("variable(%s) redefine\n", id_name);
+      assert(false);
+    }
   }
+
   expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   return statement;
 }
@@ -1337,6 +1373,17 @@ int get_var_index_in_scope(struct parser_scope *scope, const char *key) {
   }
 }
 
+int get_var_index_in_scope_without_top(struct parser_scope *scope,
+                                       const char *key) {
+  while (scope != NULL && !scope->is_top_scope) {
+    MapPair *p = map_get(scope->variables, key);
+    if (p != NULL) {
+      return (int)p->value;
+    }
+    scope = scope->parent;
+  }
+}
+
 struct syntax_expr *parser_primary(struct Parser *parser) {
   switch (parser->sc->cur_token.type) {
   case TOKEN_NUM: {
@@ -1391,6 +1438,10 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
       id->data.identifier_expr.from_params = true;
       id->data.identifier_expr.offset = (int)variable_define_from_params->value;
     } else {
+      id->data.identifier_expr.is_from_top =
+          get_var_index_in_scope_without_top(
+              parser->cur_scope, id->data.identifier_expr.name) == NULL;
+
       id->data.identifier_expr.var_index = get_var_index_in_scope(
           parser->cur_scope, id->data.identifier_expr.name);
     }
@@ -1798,8 +1849,14 @@ void instruction_to_file() {
 void statement_stmt_var_decl_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_VAR_DECL);
   expression_visitor(statement->data.var_stmt.initializer);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
-                   statement->data.var_stmt.var_index);
+  if (strcmp(CURRENT_FUNCTION_NAME, "__init__") == 0) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE %d",
+                     statement->data.var_stmt.var_index);
+  } else {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "STORE #%d",
+                     statement->data.var_stmt.var_index +
+                         GLOBAL_PARSER->root_scope->top_var_count);
+  }
 }
 void statement_stmt_expr_visitor(struct syntax_statement *statement) {
   assert(statement->type == STMT_EXPR);
@@ -1813,8 +1870,14 @@ void expression_visitor(struct syntax_expr *expr) {
       INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
                        expr->data.identifier_expr.offset);
     } else {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d", // bp+%d
-                       expr->data.identifier_expr.var_index);
+      if (expr->data.identifier_expr.is_from_top) {
+        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
+                         expr->data.identifier_expr.var_index);
+      } else {
+        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d", // bp+%d
+                         expr->data.identifier_expr.var_index +
+                             GLOBAL_PARSER->root_scope->top_var_count);
+      }
     }
   } break;
   case EXPR_BINARY:
@@ -2270,7 +2333,8 @@ void vm_link_progress(MapPair *pair, void *data) {
   struct Vec *funcs = (struct Vec *)pair->value;
   MapPair *r = map_get(vm->root_context->symbols, pair->key);
   if (r == NULL) {
-    printf("linker error, %s not found.", pair->key);
+    printf("linker error, %s not found.\n", pair->key);
+    assert(false);
     return;
   }
   for (int i = 0; i < funcs->count; i++) {
@@ -2298,7 +2362,7 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
   ZValue *v = vm->stacks[vm->sp--];
   if (value->type == VAL_REGISTER) {
     map_insert(vm->registers, (const char *)(value->data.ptr), v);
-  } else {
+  } else if (value->type == VAL_OFFSET) {
     // printf("STORE---> %ld\n", v);
     /*
     When loading a reference-type data, the consumer should directly resolve or
@@ -2311,11 +2375,17 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     //   value->data.ptr = v;
     // }
     if (value->type == VAL_OFFSET) {
-      if (vm->sp < value->data.i_val) {
-        vm->sp = value->data.i_val;
+      int target_position = value->data.i_val + vm->cur_context->bp;
+      if (vm->sp < target_position) {
+        vm->sp = target_position;
       }
-      vm->stacks[value->data.i_val] = v;
+      vm->stacks[target_position] = v;
     }
+  } else {
+    if (vm->sp < value->data.i_val) {
+      vm->sp = value->data.i_val;
+    }
+    vm->stacks[value->data.i_val] = v;
   }
 }
 
@@ -2360,7 +2430,8 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
       vm->stacks[++vm->sp] = v;
     }
   } else {
-    vm->stacks[++vm->sp] = value;
+    int offset = value->data.i_val;
+    vm->stacks[++vm->sp] = vm->stacks[offset];
   }
 }
 
@@ -2827,9 +2898,58 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
+void __INIT__RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_FUNC);
+  ZFunction *func = (ZFunction *)(value->data.ptr);
+  func->ctx->pc = 0;
+  bool vm_stack_is_empty = vm->sp < 0;
+  func->ctx->bp = 0;
+  vm->cur_context = func->ctx;
+  struct Vec *code = func->instructions;
+  for (; func->ctx->pc < code->count; func->ctx->pc++) {
+    INSTRUCTION *inst = (INSTRUCTION *)code->get(code, func->ctx->pc);
+    switch (inst->code) {
+    case I_PUSH:
+      PUSH_INST_RUN(vm, (ZValue *)inst->v);
+      break;
+    case I_STORE: {
+      STORE_INST_RUN(vm, (ZValue *)inst->v);
+      if (inst->v->type == VAL_REGISTER &&
+          strcmp((const char *)(inst->v->data.ptr), "ei") == 0) {
+        func->ctx->pc = code->count;
+      }
+    } break;
+    case I_LOAD:
+    case I_ADD:
+    case I_MINUS:
+    case I_MULTI:
+    case I_DIV:
+    case I_CALL:
+    case I_ACCESS:
+    case I_G:
+    case I_GE:
+    case I_L:
+    case I_LE:
+    case I_NEGATE:
+    case I_NOT:
+    case I_E:
+    case I_NE:
+    case I_ASSIGN:
+    case I_FREE:
+    case I_JUMP:
+    case I_JF:
+    case I_POP:
+    case I_SET:
+    default:
+      assert(false);
+    }
+  }
+  vm->cur_context = func->ctx->parent;
+}
+
 int VM_Run(VM *vm) {
   for (int i = vm->globals->count - 1; i >= 0; i--) {
-    CALL_INST_RUN(vm, vm->globals->get(vm->globals, i));
+    __INIT__RUN(vm, vm->globals->get(vm->globals, i));
   }
   CALL_INST_RUN(vm, vm->entry);
 }
@@ -2859,12 +2979,18 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
     name[content_len] = '\0';
     zv->data.ptr = name;
     return new_inst(I_STORE, zv);
+  } else if (value[0] == '#') {
+    int offset = (int)strtod(value + 1, NULL);
+    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
+    zv->type = VAL_OFFSET;
+    zv->data.i_val = offset;
+    return new_inst(I_STORE, zv);
   } else {
-    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-    v->type = VAL_OFFSET;
-    v->data.i_val = (int)strtod(value, NULL);
-    ;
-    return new_inst(I_STORE, v);
+    int offset = (int)strtod(value, NULL);
+    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
+    zv->type = VAL_INT;
+    zv->data.i_val = offset;
+    return new_inst(I_STORE, zv);
   }
 }
 
@@ -2904,7 +3030,11 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     zv->data.ptr = name;
     return new_inst(I_LOAD, zv);
   } else {
-    assert(false);
+    int offset = (int)strtod(value, NULL);
+    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
+    zv->type = VAL_INT;
+    zv->data.i_val = offset;
+    return new_inst(I_LOAD, zv);
   }
 }
 
@@ -3047,7 +3177,25 @@ const char *append_suffix(const char *m) {
   return source_file_name;
 }
 
-void compile(const char *file_name) {
+Map *programs = NULL;
+
+void zero_parser(const char *file_name) {
+  if (programs == NULL) {
+    programs = new_map();
+  }
+  if (GLOBAL_PARSER == NULL) {
+    GLOBAL_PARSER = parser_init();
+  }
+  GLOBAL_PARSER = parser_reload(GLOBAL_PARSER, file_name);
+  struct syntax_program *program = parser_program(GLOBAL_PARSER);
+  map_insert(programs, file_name, program);
+  for (int i = 0; i < program->include_paths->count; i++) {
+    zero_parser(
+        append_suffix(program->include_paths->get(program->include_paths, i)));
+  }
+}
+
+void zero_compile(const char *file_name) {
   struct instruction_store *st = NULL;
   if (root_instruction_store == NULL) {
     ROOT_INSTRUCTION_INIT();
@@ -3058,14 +3206,18 @@ void compile(const char *file_name) {
     cur_instruction_store->childs->push(cur_instruction_store->childs, st);
     cur_instruction_store = st;
   }
-  struct Parser *parser = parser_init(file_name);
-  struct syntax_program *program = parser_program(parser);
+
+  MapPair *pair = map_get(programs, file_name);
+  if (pair == NULL) {
+    assert(false);
+  }
+  struct syntax_program *program = (struct syntax_program *)pair->value;
   GET_INSTRUCTION_STORE()->fd =
       open(target_filename(file_name), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   program_visitor(program);
   instruction_to_file();
   for (int i = 0; i < program->include_paths->count; i++) {
-    compile(
+    zero_compile(
         append_suffix(program->include_paths->get(program->include_paths, i)));
     if (st == NULL) {
       cur_instruction_store = root_instruction_store;
@@ -3073,6 +3225,11 @@ void compile(const char *file_name) {
       cur_instruction_store = st->parent;
     }
   }
+}
+
+void compile(const char *file_name) {
+  zero_parser(file_name);
+  zero_compile(file_name);
 }
 
 #endif

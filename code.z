@@ -6,6 +6,8 @@ func sayHi(){
 
 var a = 1;
 
+var version = 99;
+
 func loop(a, b){
     while(b > 0){
         print(a * 1);
@@ -70,4 +72,8 @@ func main(){
     }
 
     print(d);
+    print(version);
+    var version = 1;
+    print(version);
+    print(printVersion());
 }

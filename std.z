@@ -16,6 +16,12 @@ func swap(a, b){
     b = c;
 }
 
+var version = 100;
+
+func printVersion(){
+    print(version);
+}
+
 /*
  * Compares two numeric values and returns the greater one.
  */
