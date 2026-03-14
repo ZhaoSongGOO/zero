@@ -20,3 +20,5 @@ func main(){
 - [Syntax](./syntax.md)
 
 - [TODO](./TODO.md)
+
+- [Introduction](./introduction.md)
