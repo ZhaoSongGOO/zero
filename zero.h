@@ -2449,12 +2449,20 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       }
     } else {
       ZValue *target = vm->stacks[target_position];
-      if (target->type == VAL_REF) {
-        if (v->type == VAL_REF) {
-          target->data.ptr = v->data.ptr;
-        } else {
-          target->data.ptr = v;
-        }
+      /*
+      >>> a = {"name":"mike"}
+      >>> a
+      {'name': 'mike'}
+      >>> def run(x):
+      ...     x = 3
+      ...
+      >>> run(a)
+      >>> a
+      {'name': 'mike'}
+      */
+      if (v->type == VAL_REF) {
+        target->type = VAL_REF;
+        target->data.ptr = v->data.ptr;
       } else {
         vm->stacks[target_position] = v;
       }
