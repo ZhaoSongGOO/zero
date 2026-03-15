@@ -222,14 +222,14 @@ main:
   STORE #11
   LOAD #11
   PUSH_S key
-  ACCESS
+  GET
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD #11
   PUSH_S address
-  ACCESS
+  GET
   CALL print
   FREE 1
   LOAD [ei]
@@ -298,7 +298,7 @@ main:
   STORE #13
   LOAD #13
   PUSH_S run
-  ACCESS
+  GET
   PUSH_D 5
   PUSH_S "Iam running"
   CALL -2
@@ -358,18 +358,18 @@ main:
   FREE 1
   LOAD #15
   PUSH_S owner
-  ACCESS
+  GET
   PUSH_S run
-  ACCESS
+  GET
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD #15
   PUSH_S owner
-  ACCESS
+  GET
   PUSH_S run
-  ACCESS
+  GET
   PUSH_D 3
   PUSH_S "owner running"
   CALL -2

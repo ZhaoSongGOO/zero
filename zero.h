@@ -89,6 +89,7 @@ struct str_store {
   unsigned int (*insert)(struct str_store *self, const char *src,
                          unsigned int size);
   unsigned int (*insert_raw)(struct str_store *self, const char *src);
+  void (*remove_end)(struct str_store *self);
 };
 
 struct source {
@@ -120,6 +121,8 @@ unsigned int str_store_insert_raw_impl(struct str_store *self, const char *src);
 
 unsigned int str_store_insert_impl(struct str_store *self, const char *src,
                                    unsigned int size);
+
+void remove_end_impl(struct str_store *self);
 
 struct str_store *str_store_init();
 
@@ -550,6 +553,24 @@ unsigned int str_store_insert_raw_impl(struct str_store *self,
   return self->count - 1;
 }
 
+void remove_end_impl(struct str_store *self) {
+  if (self->count == 0) {
+    return;
+  }
+  if (self->count == 1) {
+    free(self->head->str);
+    free(self->head);
+    self->count = 0;
+    self->head = NULL;
+    self->tail = NULL;
+  }
+
+  self->tail = self->tail->prev;
+  free(self->tail->next->str);
+  free(self->tail->next);
+  self->count -= 1;
+}
+
 unsigned int str_store_insert_impl(struct str_store *self, const char *src,
                                    unsigned int size) {
   struct str_item *p = (struct str_item *)malloc(sizeof(struct str_item));
@@ -578,6 +599,8 @@ struct str_store *str_store_init() {
   store->tail = NULL;
   store->get = str_store_get_impl;
   store->insert = str_store_insert_impl;
+  store->insert_raw = str_store_insert_raw_impl;
+  store->remove_end = remove_end_impl;
   return store;
 }
 
@@ -927,6 +950,7 @@ struct syntax_expr *parser_call(struct syntax_expr *caller,
                                 struct Parser *parser);
 struct syntax_expr *parser_primary_call(struct Parser *parser);
 struct syntax_expr *parser_primary(struct Parser *parser);
+struct syntax_expr *parser_object_access(struct Parser *parser);
 struct syntax_expr *parser_arraylist(struct Parser *parser);
 struct syntax_expr *parser_objectlist(struct Parser *parser);
 struct syntax_expr *parser_expr(struct Parser *parser);
@@ -1191,9 +1215,8 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
   return statement;
 }
 struct syntax_expr *parser_expr(struct Parser *parser) {
-  if (parser->sc->cur_token.type == TOKEN_ID &&
-      parser->sc->next_token.type == TOKEN_ASSIGN) {
-    struct syntax_expr *id = parser_primary(parser);
+  struct syntax_expr *id = parser_logic_or(parser);
+  if (parser->sc->cur_token.type == TOKEN_ASSIGN) {
     expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
     struct syntax_expr *binary =
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
@@ -1202,15 +1225,20 @@ struct syntax_expr *parser_expr(struct Parser *parser) {
     binary->data.binary_expr.right = parser_expr(parser);
     binary->data.binary_expr.op = TOKEN_ASSIGN;
     return binary;
-  } else {
-    return parser_logic_or(parser);
   }
+  return id;
 }
 
 struct syntax_expr *parser_assignment_expr(struct Parser *parser) {
-  if (parser->sc->cur_token.type == TOKEN_ID &&
-      parser->sc->next_token.type == TOKEN_ASSIGN) {
-  }
+  struct syntax_expr *id = parser_primary(parser);
+  expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
+  struct syntax_expr *binary =
+      (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+  binary->type = EXPR_BINARY;
+  binary->data.binary_expr.left = id;
+  binary->data.binary_expr.right = parser_expr(parser);
+  binary->data.binary_expr.op = TOKEN_ASSIGN;
+  return binary;
 }
 
 struct syntax_expr *parser_logic_or(struct Parser *parser) {
@@ -1735,13 +1763,7 @@ struct instruction_store *new_instruction_store() {
   inst_store->map = new_map();
   inst_store->childs = new_vec();
   inst_store->parent = NULL;
-  struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
-  s->count = 0;
-  s->head = NULL;
-  s->tail = NULL;
-  s->get = str_store_get_impl;
-  s->insert = str_store_insert_impl;
-  s->insert_raw = str_store_insert_raw_impl;
+  struct str_store *s = str_store_init();
   inst_store->static_func = s;
   return inst_store;
 }
@@ -1753,13 +1775,7 @@ void ROOT_INSTRUCTION_INIT() {
   root_instruction_store->map = new_map();
   root_instruction_store->childs = new_vec();
   root_instruction_store->parent = NULL;
-  struct str_store *s = (struct str_store *)malloc(sizeof(struct str_store));
-  s->count = 0;
-  s->head = NULL;
-  s->tail = NULL;
-  s->get = str_store_get_impl;
-  s->insert = str_store_insert_impl;
-  s->insert_raw = str_store_insert_raw_impl;
+  struct str_store *s = str_store_init();
   root_instruction_store->static_func = s;
 }
 
@@ -1802,6 +1818,20 @@ int INSTRUCTION_COUNT(const char *seg) {
   }
 }
 
+void INSTRUCTION_REMOVE_END(const char *seg) {
+  struct instruction_store *gs = GET_INSTRUCTION_STORE();
+  if (strcmp(seg, "__init__") == 0) {
+    gs->static_func->remove_end(gs->static_func);
+  } else {
+    struct map_pair *pair = map_get(gs->map, seg);
+    if (pair == NULL) {
+      return;
+    }
+    struct str_store *s = (struct str_store *)pair->value;
+    s->remove_end(s);
+  }
+}
+
 int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   struct instruction_store *gs = GET_INSTRUCTION_STORE();
   char *buf = NULL;
@@ -1829,14 +1859,7 @@ int INSTRUCTION_SAVE(const char *seg, const char *fmt, ...) {
   } else {
     struct map_pair *pair = map_get(gs->map, seg);
     if (pair == NULL) {
-      struct str_store *s =
-          (struct str_store *)malloc(sizeof(struct str_store));
-      s->count = 0;
-      s->head = NULL;
-      s->tail = NULL;
-      s->get = str_store_get_impl;
-      s->insert = str_store_insert_impl;
-      s->insert_raw = str_store_insert_raw_impl;
+      struct str_store *s = str_store_init();
       s->insert_raw(s, buf);
       map_insert(gs->map, seg, s);
       return 0;
@@ -1938,7 +1961,7 @@ void expression_access_visitor(struct syntax_expr *expr) {
     const char *prop =
         expr->data.access_expr.props->get(expr->data.access_expr.props, i);
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", prop);
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ACCESS");
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "GET");
   }
   // TODO: support pass this ptr, may be use.
   // expression_visitor(expr->data.access_expr.obj);
@@ -1975,6 +1998,10 @@ void expression_literal_visitor(struct syntax_expr *expr) {
 void expression_binary_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_BINARY);
   expression_visitor(expr->data.binary_expr.left);
+  if (expr->data.binary_expr.left->type == EXPR_ACCESS &&
+      expr->data.binary_expr.op == TOKEN_ASSIGN) {
+    INSTRUCTION_REMOVE_END(CURRENT_FUNCTION_NAME);
+  }
   expression_visitor(expr->data.binary_expr.right);
   switch (expr->data.binary_expr.op) {
   case TOKEN_ADD:
@@ -2008,22 +2035,27 @@ void expression_binary_visitor(struct syntax_expr *expr) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LE");
     break;
   case TOKEN_ASSIGN: {
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ASSIGN");
-    if (expr->data.binary_expr.left->data.identifier_expr.is_from_top) {
-      INSTRUCTION_SAVE(
-          CURRENT_FUNCTION_NAME, "STORE %d",
-          expr->data.binary_expr.left->data.identifier_expr.var_index);
+    if (expr->data.binary_expr.left->type == EXPR_ACCESS) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "SET");
     } else {
-      if (expr->data.binary_expr.left->data.identifier_expr.from_params) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "ASSIGN");
+      if (expr->data.binary_expr.left->data.identifier_expr.is_from_top) {
         INSTRUCTION_SAVE(
-            CURRENT_FUNCTION_NAME, "STORE #-%d",
-            expr->data.binary_expr.left->data.identifier_expr.offset);
+            CURRENT_FUNCTION_NAME, "STORE %d",
+            expr->data.binary_expr.left->data.identifier_expr.var_index);
       } else {
-        INSTRUCTION_SAVE(
-            CURRENT_FUNCTION_NAME, "STORE #%d",
-            expr->data.binary_expr.left->data.identifier_expr.var_index + 1);
+        if (expr->data.binary_expr.left->data.identifier_expr.from_params) {
+          INSTRUCTION_SAVE(
+              CURRENT_FUNCTION_NAME, "STORE #-%d",
+              expr->data.binary_expr.left->data.identifier_expr.offset);
+        } else {
+          INSTRUCTION_SAVE(
+              CURRENT_FUNCTION_NAME, "STORE #%d",
+              expr->data.binary_expr.left->data.identifier_expr.var_index + 1);
+        }
       }
     }
+
   }
 
   break;
@@ -2165,7 +2197,8 @@ typedef enum {
   I_FREE,
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
-  I_ACCESS
+  I_GET,
+  I_SET
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2259,7 +2292,8 @@ INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
-INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_GET_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2286,7 +2320,8 @@ void init_actions() {
   map_insert(actions, "FREE", NEW_FREE_INSTRUCTION);
   map_insert(actions, "JUMP", NEW_JUMP_INSTRUCTION);
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
-  map_insert(actions, "ACCESS", NEW_ACCESS_INSTRUCTION);
+  map_insert(actions, "GET", NEW_GET_INSTRUCTION);
+  map_insert(actions, "SET", NEW_SET_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2871,10 +2906,42 @@ ZValue *copy(ZValue *src) {
   case VAL_FLOAT:
   case VAL_NULL:
   case VAL_OFFSET:
-  case VAL_REGISTER:
-    return src;
+  case VAL_REGISTER: {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = src->type;
+    v->data = src->data;
+    return v;
+  }
   default:
     assert(false);
+  }
+}
+
+void SET_INST_RUN(VM *vm, ZValue *value) {
+  assert(vm->sp >= 2);
+  ZValue *ref = vm->stacks[vm->sp - 2];
+  ZValue *prop = vm->stacks[vm->sp - 1];
+  ZValue *v = vm->stacks[vm->sp];
+  assert(ref->type == VAL_REF);
+  assert(prop->type == VAL_STR_INDEX);
+  ZValue *obj_wrapper = (ZObject *)ref->data.ptr;
+  assert(obj_wrapper->type == VAL_OBJ_PTR);
+  ZObject *obj = (ZObject *)obj_wrapper->data.ptr;
+
+  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
+  for (int i = 0; i < obj->count; i++) {
+    if (strcmp(obj->entries[i].key, key) == 0) {
+      ZValue *nv = (ZValue *)malloc(sizeof(ZValue));
+      nv->type = v->type;
+      if (v->type == VAL_REF) {
+        nv->data.ptr = v->data.ptr;
+      } else {
+        nv->data = v->data;
+      }
+      obj->entries[i].value = nv;
+      vm->sp -= 3;
+      return;
+    }
   }
 }
 
@@ -2883,7 +2950,7 @@ void COPY_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[vm->sp] = copy(src);
 }
 
-void ACCESS_INST_RUN(VM *vm, ZValue *value) {
+void GET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
   assert(obj_ref->type == VAL_REF);
@@ -2954,8 +3021,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       CALL_INST_RUN(vm, (ZValue *)inst->v);
       vm->cur_context = runnable->ctx;
     } break;
-    case I_ACCESS:
-      ACCESS_INST_RUN(vm, inst->v);
+    case I_GET:
+      GET_INST_RUN(vm, inst->v);
       break;
     case I_G:
     case I_GE:
@@ -2978,6 +3045,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
       break;
     case I_JF:
       JF_INST_RUN(vm, inst->v);
+      break;
+    case I_SET:
+      SET_INST_RUN(vm, inst->v);
       break;
     default:
       assert(false);
@@ -3028,7 +3098,7 @@ void __INIT__RUN(VM *vm, ZValue *value) {
     case I_MULTI:
     case I_DIV:
     case I_CALL:
-    case I_ACCESS:
+    case I_GET:
     case I_G:
     case I_GE:
     case I_L:
@@ -3249,8 +3319,12 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_JF, v);
 }
 
-INSTRUCTION *NEW_ACCESS_INSTRUCTION(VM *vm, const char *value) {
-  return new_inst(I_ACCESS, NULL);
+INSTRUCTION *NEW_GET_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_GET, NULL);
+}
+
+INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_SET, NULL);
 }
 
 const char *append_suffix(const char *m) {

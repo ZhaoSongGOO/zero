@@ -52,12 +52,20 @@ These instructions push literal values of specific types onto the stack.
 
 * `FREE <n>`: Removes `n` elements from the top of the stack.
 
-### ACCESS
+### GET
 
 **Description**: Property access for objects.
 
 * Pops `a` (attribute name) and `b` (object).
 * Pushes the value of `b.a` onto the stack. Requires `b` to be an `Object` type.
+
+
+### SET
+
+**Description**: Property set for objects.
+
+* Pops `a` (attribute name) and `b` (object) and `c` (value).
+* Set `c` to `a.b`.
 
 ### ASSIGN
 

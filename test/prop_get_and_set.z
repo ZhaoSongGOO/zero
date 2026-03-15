@@ -1,0 +1,37 @@
+func af(){
+    print("a1");
+}
+
+func as(){
+    print("a2");
+}
+
+func at(name, twice){
+    while(twice > 0){
+        print(name);
+        twice = twice - 1;
+    }
+}
+
+func main(){
+    var a = {"age": 1, "action":af};
+    print(a.age);
+    a.action();
+    a.age = 112;
+    print(a.age);
+    a.action = as;
+    a.action();
+
+    var b = {"kernel":a};
+
+    print(b.kernel.action);
+
+    b.kernel.action();
+
+    b.kernel.action = at;
+    
+    b.kernel.action("haha", 3);
+
+    a.action("oooo", 3);
+
+}

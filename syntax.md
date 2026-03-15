@@ -28,8 +28,8 @@ expr_stmt  = expression ;
 
 expression = assign_expr ;
 
-assign_expr = identifier "=" assign_expr 
-            | logic_or ;
+# level 0
+assign_expr = logic_or "=" assign_expr 
 
 # level 1
 logic_or = logic_and { "||" logic_and };
@@ -55,7 +55,9 @@ factor     = [ "!" | "-" ] primary_call ;
 # level 8
 primary_call = primary { "(" [ arg_list ] ")" };
 
-primary    = identifier {"." string} | number | string | bool |array_list | object_list | null | "(" expression ")" ;
+primary    = obj_access | number | string | bool |array_list | object_list | null | "(" expression ")" ;
+
+obj_access = identifier {"." string}
 
 arg_list   = expression { "," expression } ;
 

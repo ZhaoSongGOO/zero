@@ -1,0 +1,123 @@
+__init__:
+af:
+  PUSH_S "a1"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+as:
+  PUSH_S "a2"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+at:
+  LOAD #-1
+  PUSH_D 0
+  G
+  JF 12
+  LOAD #-0
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #-1
+  LOAD #-1
+  PUSH_D 1
+  MINUS
+  ASSIGN
+  STORE #-1
+  JUMP -15
+main:
+  PUSH_S age
+  PUSH_D 1
+  PUSH_S action
+  LOAD .af
+  PUSH_D 2
+  CALL NEW_OBJECT
+  STORE #1
+  LOAD #1
+  PUSH_S age
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S action
+  GET
+  CALL -0
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S age
+  PUSH_D 112
+  SET
+  LOAD #1
+  PUSH_S age
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S action
+  LOAD .as
+  SET
+  LOAD #1
+  PUSH_S action
+  GET
+  CALL -0
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  PUSH_S kernel
+  LOAD #1
+  PUSH_D 1
+  CALL NEW_OBJECT
+  STORE #2
+  LOAD #2
+  PUSH_S kernel
+  GET
+  PUSH_S action
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  PUSH_S kernel
+  GET
+  PUSH_S action
+  GET
+  CALL -0
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  PUSH_S kernel
+  GET
+  PUSH_S action
+  LOAD .at
+  SET
+  LOAD #2
+  PUSH_S kernel
+  GET
+  PUSH_S action
+  GET
+  PUSH_D 3
+  PUSH_S "haha"
+  CALL -2
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S action
+  GET
+  PUSH_D 3
+  PUSH_S "oooo"
+  CALL -2
+  FREE 3
+  LOAD [ei]
+  FREE 1
