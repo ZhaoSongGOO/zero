@@ -1,0 +1,7 @@
+func test(a){
+    print(a);
+}
+func main(){
+    var x = [1, 2, 3, "Hello"];
+    test(x);
+}

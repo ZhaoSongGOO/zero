@@ -1,0 +1,12 @@
+func test(a){
+    a.run();
+}
+
+func action(){
+    print("Running!");
+}
+
+func main(){
+    var x = {"run":action};
+    test(x);
+}

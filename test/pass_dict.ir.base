@@ -1,0 +1,26 @@
+__init__:
+test:
+  LOAD #-0
+  PUSH_S run
+  GET
+  CALL -0
+  FREE 1
+  LOAD [ei]
+  FREE 1
+action:
+  PUSH_S "Running!"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+main:
+  PUSH_S run
+  LOAD .action
+  PUSH_D 1
+  CALL NEW_OBJECT
+  STORE #1
+  LOAD #1
+  CALL test
+  FREE 1
+  LOAD [ei]
+  FREE 1
