@@ -1,0 +1,19 @@
+func assigna(x){
+    x = 2;
+}
+
+func assignb(x){
+    x.name = "mike";
+}
+
+func main(){
+    var a = 1;
+    print(a);
+    assigna(a);
+    print(a);
+
+    a = {"name": "lily"};
+    print(a);
+    assignb(a);
+    print(a);
+}

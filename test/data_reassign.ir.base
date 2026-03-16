@@ -1,0 +1,51 @@
+__init__:
+assigna:
+  LOAD #-0
+  PUSH_D 2
+  ASSIGN
+  STORE #-0
+assignb:
+  LOAD #-0
+  PUSH_S name
+  PUSH_S "mike"
+  SET
+main:
+  PUSH_D 1
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL assigna
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S name
+  PUSH_S "lily"
+  PUSH_D 1
+  CALL NEW_OBJECT
+  ASSIGN
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL assignb
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1

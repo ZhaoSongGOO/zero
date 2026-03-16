@@ -105,13 +105,13 @@ func main(){
 }
 ```
 
-9.  📌 remove register
+9. ✅ remove register
 
 - remove ei register
 - remove cvalues register
 
 
-10.  📌 support access functin type member
+10. ✅ support access functin type member
 
 ```js
 func k(a){
