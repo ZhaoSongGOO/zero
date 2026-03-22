@@ -2340,6 +2340,8 @@ struct zero_context {
   int bp;
 };
 
+ZValue *copy(ZValue *src);
+
 #define Context struct zero_context
 
 typedef struct {
@@ -2924,8 +2926,8 @@ void new_array(VM *vm) {
   arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
   for (int i = 0; i < arr->length; i++) {
     ZValue *src = vm->stacks[vm->sp - arr->length + 1 + i];
-    arr->elements[i] = (ZValue *)malloc(sizeof(ZValue));
-    arr->elements[i] = src;
+    // arr->elements[i] = (ZValue *)malloc(sizeof(ZValue));
+    arr->elements[i] = copy(src);
   }
   data->data.ptr = arr;
   vm->sp -= arr->length - 1;
@@ -2949,9 +2951,9 @@ void new_object(VM *vm) {
     assert(key->type == VAL_STR_INDEX);
     ZValue *value = vm->stacks[stack_base + i * 2 + 2];
     arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
-    arr->entries[i].value = (ZValue *)malloc(sizeof(ZValue));
-    arr->entries[i].value->data = value->data;
-    arr->entries[i].value->type = value->type;
+    arr->entries[i].value = copy(value);
+    // arr->entries[i].value->data = value->data;
+    // arr->entries[i].value->type = value->type;
   }
   data->data.ptr = arr;
   vm->sp -= arr->count * 2 - 1;
