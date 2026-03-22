@@ -1,6 +1,6 @@
 
 ```
-program    = { statement | func_define } ;
+program    = { statement | func_define | type_define} ;
 
 statement  = var_decl ";" 
            | expr_stmt ";"
@@ -20,13 +20,23 @@ while_stmt = "while" "(" expression ")" block_stmt;
 
 func_define = "func" string"("[params]")" "{" {statement} "}";
 
+type_define = "typedef" string "{" {type_pair} "}" ;
+
+type_pair = string ":" TYPE ";" ;
+
 params = identifier {"," identifier} ;
 
 var_decl   = "var" identifier ["=" expression] ;
 
 expr_stmt  = expression ; 
 
-expression = assign_expr ;
+expression = assign_expr | new_expr;
+
+new_expr = "new" identifier "{" {new_assigns} "}";
+
+new_assigns = new_assign {, new_assigns};
+
+new_assign = identifier "=" expression ;
 
 # level 0
 assign_expr = logic_or "=" assign_expr 

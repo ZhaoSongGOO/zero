@@ -1,0 +1,74 @@
+__init__:
+main:
+  PUSH_S data
+  PUSH_D 1
+  PUSH_D 1
+  CALL NEW_OBJECT
+  STORE #1
+  PUSH_S data
+  PUSH_D 2
+  PUSH_D 1
+  CALL NEW_OBJECT
+  STORE #2
+  LOAD #1
+  PUSH_S data
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  PUSH_S data
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  LOAD #1
+  CALL swap
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S data
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  PUSH_S data
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S age
+  LOAD #1
+  PUSH_S next
+  PUSH_N
+  PUSH_D 2
+  CALL NEW_OBJECT
+  ASSIGN
+  STORE #1
+  LOAD #2
+  PUSH_S age
+  LOAD #2
+  PUSH_S next
+  LOAD #1
+  PUSH_D 2
+  CALL NEW_OBJECT
+  ASSIGN
+  STORE #2
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1

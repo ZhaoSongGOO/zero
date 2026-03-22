@@ -1,0 +1,33 @@
+include("std");
+
+typedef Int {
+data:
+  int;
+};
+
+typedef Custom {
+age:
+  Int;
+next:
+  Custom;
+};
+
+func main() {
+  var a = new Int{data = 1};
+  var b = new Int{data = 2};
+
+  print(a.data);
+  print(b.data);
+  swap(a, b);
+  print(a.data);
+  print(b.data);
+
+  a = new Custom{
+      age = a,
+  };
+
+  b = new Custom{age = b, next = a};
+
+  print(a);
+  print(b);
+}

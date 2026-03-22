@@ -53,6 +53,8 @@ typedef enum {
   TOKEN_RIGHT_BRACE,   // }
   TOKEN_DOUBLE_QUOTES, // "
   TOKEN_COLON,         // :
+  TOKEN_TYPE_DEF,      // typedef
+  TOKEN_NEW,           // new
   TOKEN_EOF
 } TOKEN_TYPE;
 
@@ -222,12 +224,15 @@ bool is_opcode(char c) {
          c == '<' || c == '&' || c == '|';
 }
 
+bool is_type(const char *str) {}
+
 bool is_keyword(const char *str) {
   return strcmp(str, "var") == 0 || strcmp(str, "true") == 0 ||
          strcmp(str, "false") == 0 || strcmp(str, "func") == 0 ||
          strcmp(str, "return") == 0 || strcmp(str, "if") == 0 ||
          strcmp(str, "else") == 0 || strcmp(str, "while") == 0 ||
-         strcmp(str, "include") == 0 || strcmp(str, "null") == 0;
+         strcmp(str, "include") == 0 || strcmp(str, "null") == 0 ||
+         strcmp(str, "typedef") == 0 || strcmp(str, "new") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -275,6 +280,15 @@ struct token scanner_letter(struct scanner *s) {
     if (strcmp(str, "null") == 0) {
       return (struct token){.type = TOKEN_NULL};
     }
+
+    if (strcmp(str, "typedef") == 0) {
+      return (struct token){.type = TOKEN_TYPE_DEF};
+    }
+
+    if (strcmp(str, "new") == 0) {
+      return (struct token){.type = TOKEN_NEW};
+    }
+
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
   }
   return (struct token){.type = TOKEN_ID, .value = {.symbol_index = si}};
@@ -735,7 +749,8 @@ struct syntax_expr {
     EXPR_ARRAY,
     EXPR_OBJECT,
     EXPR_ID,
-    EXPR_ACCESS
+    EXPR_ACCESS,
+    EXPR_NEW
   } type;
 
   union {
@@ -779,6 +794,11 @@ struct syntax_expr {
       struct syntax_expr *obj;
       struct Vec *props;
     } access_expr;
+
+    struct {
+      struct type_def_meta_data *mete_data;
+      Map *init_list;
+    } new_expr;
 
     struct {
       enum { LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL, LIT_NULL } kind;
@@ -876,10 +896,23 @@ struct syntax_program {
   struct Vec *include_paths;
 };
 
+struct type_def_meta_data {
+  const char *type_name;
+  Map *segments;
+};
+
+struct type_def_meta_data *new_type_def_meta_data() {
+  struct type_def_meta_data *r =
+      (struct type_def_meta_data *)malloc(sizeof(struct type_def_meta_data));
+  r->segments = new_map();
+  return r;
+}
+
 struct parser_scope {
   struct parser_scope *parent;
   Map *variables;
   Map *params;
+  Map *type_defs;
   bool is_top_scope;
   bool is_root_scope;
   int top_var_count;
@@ -902,6 +935,7 @@ struct parser_scope *new_parser_scope() {
   psp->is_top_scope = false;
   psp->is_root_scope = false;
   psp->top_var_count = 0;
+  psp->type_defs = new_map();
   return psp;
 }
 
@@ -954,6 +988,8 @@ struct syntax_expr *parser_object_access(struct Parser *parser);
 struct syntax_expr *parser_arraylist(struct Parser *parser);
 struct syntax_expr *parser_objectlist(struct Parser *parser);
 struct syntax_expr *parser_expr(struct Parser *parser);
+struct syntax_expr *parser_new(struct Parser *parser);
+void parser_type_def(struct Parser *parser);
 
 struct syntax_program *parser_program(struct Parser *parser) {
   struct syntax_program *program =
@@ -972,6 +1008,8 @@ struct syntax_program *parser_program(struct Parser *parser) {
       module->type = FUNC_DEFINE;
       module->data.statement = func;
       program->modules->push(program->modules, module);
+    } else if (parser->sc->cur_token.type == TOKEN_TYPE_DEF) {
+      parser_type_def(parser);
     } else {
       struct syntax_statement *stmt = parser_statement(parser);
       if (stmt->type == STMT_INCLUDE) {
@@ -987,6 +1025,34 @@ struct syntax_program *parser_program(struct Parser *parser) {
     }
   }
   return program;
+}
+
+void parser_type_def(struct Parser *parser) {
+  struct type_def_meta_data *meta_data = new_type_def_meta_data();
+  expected_token_type_and_run(parser->sc, TOKEN_TYPE_DEF);
+  struct token n = parser->sc->cur_token;
+  expected_token_type_and_run(parser->sc, TOKEN_ID);
+  meta_data->type_name =
+      parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
+  while (parser->sc->cur_token.type != TOKEN_RIGHT_BRACE) {
+    const char *key =
+        parser->sc->symbol
+            ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
+            ->str;
+    expected_token_type_and_run(parser->sc, TOKEN_ID);
+    expected_token_type_and_run(parser->sc, TOKEN_COLON);
+    const char *value =
+        parser->sc->symbol
+            ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
+            ->str;
+    expected_token_type_and_run(parser->sc, TOKEN_ID);
+    map_insert(meta_data->segments, key, value);
+    expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+  }
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
+  expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
+  map_insert(parser->cur_scope->type_defs, meta_data->type_name, meta_data);
 }
 
 void parser_function_define_params_helper(struct syntax_function_define *fd,
@@ -1215,18 +1281,61 @@ struct syntax_statement *parser_expr_stmt(struct Parser *parser) {
   return statement;
 }
 struct syntax_expr *parser_expr(struct Parser *parser) {
-  struct syntax_expr *id = parser_logic_or(parser);
-  if (parser->sc->cur_token.type == TOKEN_ASSIGN) {
-    expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
-    struct syntax_expr *binary =
-        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
-    binary->type = EXPR_BINARY;
-    binary->data.binary_expr.left = id;
-    binary->data.binary_expr.right = parser_expr(parser);
-    binary->data.binary_expr.op = TOKEN_ASSIGN;
-    return binary;
+  if (parser->sc->cur_token.type == TOKEN_NEW) {
+    return parser_new(parser);
+  } else {
+    struct syntax_expr *id = parser_logic_or(parser);
+    if (parser->sc->cur_token.type == TOKEN_ASSIGN) {
+      expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
+      struct syntax_expr *binary =
+          (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+      binary->type = EXPR_BINARY;
+      binary->data.binary_expr.left = id;
+      binary->data.binary_expr.right = parser_expr(parser);
+      binary->data.binary_expr.op = TOKEN_ASSIGN;
+      return binary;
+    }
+    return id;
   }
-  return id;
+}
+
+MapPair *get_type_def_meta_data(struct parser_scope *scope, const char *name) {
+  while (scope != NULL) {
+    MapPair *pair = map_get(scope->type_defs, name);
+    if (pair != NULL) {
+      return pair;
+    }
+    scope = scope->parent;
+  }
+  return NULL;
+}
+
+struct syntax_expr *parser_new(struct Parser *parser) {
+  expected_token_type_and_run(parser->sc, TOKEN_NEW);
+  struct token n = parser->sc->cur_token;
+  expected_token_type_and_run(parser->sc, TOKEN_ID);
+  const char *type_name =
+      parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+  MapPair *pair = get_type_def_meta_data(parser->cur_scope, type_name);
+  assert(pair != NULL);
+  struct syntax_expr *expr =
+      (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+  expr->type = EXPR_NEW;
+  expr->data.new_expr.mete_data = (struct type_def_meta_data *)(pair->value);
+  expr->data.new_expr.init_list = new_map();
+  expected_token_type_and_run(parser->sc, TOKEN_LEFT_BRACE);
+  while (parser->sc->cur_token.type != TOKEN_RIGHT_BRACE) {
+    struct token n = parser->sc->cur_token;
+    expected_token_type_and_run(parser->sc, TOKEN_ID);
+    const char *key =
+        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
+    expected_token_type_and_run(parser->sc, TOKEN_ASSIGN);
+    struct syntax_expr *init_expr = parser_expr(parser);
+    soft_expected_token_type_and_run(parser->sc, TOKEN_COMMA);
+    map_insert(expr->data.new_expr.init_list, key, init_expr);
+  }
+  expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
+  return expr;
 }
 
 struct syntax_expr *parser_assignment_expr(struct Parser *parser) {
@@ -1610,6 +1719,7 @@ void expression_unary_visitor(struct syntax_expr *expr);
 void expression_array_visitor(struct syntax_expr *expr);
 void expression_object_visitor(struct syntax_expr *expr);
 void expression_access_visitor(struct syntax_expr *expr);
+void expression_new_visitor(struct syntax_expr *expr);
 void expression_call_visitor(struct syntax_expr *expr);
 void program_visitor(struct syntax_program *program);
 
@@ -1949,9 +2059,32 @@ void expression_visitor(struct syntax_expr *expr) {
   case EXPR_ACCESS:
     expression_access_visitor(expr);
     break;
+  case EXPR_NEW:
+    expression_new_visitor(expr);
+    break;
   default:
     assert(false);
   }
+}
+
+void expression_new_visitor_helper(MapPair *pair, void *data) {
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", pair->key);
+  struct syntax_expr *expr = (struct syntax_expr *)data;
+  MapPair *init_pair = map_get(expr->data.new_expr.init_list, pair->key);
+  if (init_pair != NULL) {
+    expression_visitor(init_pair->value);
+  } else {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_N");
+  }
+}
+
+void expression_new_visitor(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_NEW);
+  map_foreach(expr->data.new_expr.mete_data->segments,
+              expression_new_visitor_helper, expr);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d",
+                   expr->data.new_expr.mete_data->segments->count);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
 }
 
 void expression_access_visitor(struct syntax_expr *expr) {
@@ -2817,7 +2950,8 @@ void new_object(VM *vm) {
     ZValue *value = vm->stacks[stack_base + i * 2 + 2];
     arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
     arr->entries[i].value = (ZValue *)malloc(sizeof(ZValue));
-    arr->entries[i].value = value;
+    arr->entries[i].value->data = value->data;
+    arr->entries[i].value->type = value->type;
   }
   data->data.ptr = arr;
   vm->sp -= arr->count * 2 - 1;
