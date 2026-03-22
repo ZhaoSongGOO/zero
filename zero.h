@@ -2588,6 +2588,7 @@ void init_builtin(VM *vm) {
              get_builtin_function_value(vm, "NEW_ARRAY"));
   map_insert(vm->symbols, "NEW_OBJECT",
              get_builtin_function_value(vm, "NEW_OBJECT"));
+  map_insert(vm->symbols, "__print", get_builtin_function_value(vm, "__print"));
 }
 
 const Map *GET_ACTIONS() {
@@ -2867,7 +2868,9 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
     return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
   } else if (v->type == VAL_NULL) {
     return 0;
-  } else {
+  } else if(v->type == VAL_OBJ_PTR){
+    return (int)v->data.ptr;
+  }else{
     assert(false);
   }
 }
@@ -3000,16 +3003,39 @@ void print_arr(VM *vm, ZArray *arr) {
   printf("]");
 }
 
-void print_object(VM *vm, ZObject *obj) {
-  printf("{");
+void CALL_INST_RUN(VM *vm, ZValue *value);
+
+void print_object(VM *vm, ZValue *value) {
+  ZValue *v = (ZValue *)value->data.ptr;
+  ZObject *obj = (ZObject *)v->data.ptr;
+  ZValue *user_print_func = NULL;
   for (int i = 0; i < obj->count; i++) {
-    printf("\"%s\":", obj->entries[i].key);
-    print_data(vm, obj->entries[i].value);
-    if (i != obj->count - 1) {
-      printf(", ");
+    if (strcmp("__str__", obj->entries[i].key) == 0) {
+      user_print_func = obj->entries[i].value;
+      break;
     }
   }
-  printf("}");
+  if (user_print_func != NULL) {
+    // push this pointer: LOAD xxx
+    vm->stacks[++vm->sp] = value;
+    // push function object
+    vm->stacks[++vm->sp] = user_print_func;
+    ZValue *call_index = (ZValue *)malloc(sizeof(ZValue));
+    call_index->type = VAL_INT;
+    call_index->data.i_val = 0;
+    CALL_INST_RUN(vm, call_index);
+    vm->sp -= 2;
+  } else {
+    printf("{");
+    for (int i = 0; i < obj->count; i++) {
+      printf("\"%s\":", obj->entries[i].key);
+      print_data(vm, obj->entries[i].value);
+      if (i != obj->count - 1) {
+        printf(", ");
+      }
+    }
+    printf("}");
+  }
 }
 
 void print_ref(VM *vm, ZValue *v) {
@@ -3020,7 +3046,7 @@ void print_ref(VM *vm, ZValue *v) {
     print_arr(vm, (ZArray *)d->data.ptr);
     break;
   case VAL_OBJ_PTR:
-    print_object(vm, (ZObject *)d->data.ptr);
+    print_object(vm, v);
     break;
   default:
     print_data(vm, d);
@@ -3028,9 +3054,13 @@ void print_ref(VM *vm, ZValue *v) {
   }
 }
 
-void print(VM *vm) {
+void __print(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   print_data(vm, v);
+}
+
+void print(VM *vm) {
+  __print(vm);
   printf("\n");
 }
 
@@ -3089,6 +3119,8 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     new_array(vm);
   } else if (strcmp(func->name, "NEW_OBJECT") == 0) {
     new_object(vm);
+  } else if (strcmp(func->name, "__print") == 0) {
+    __print(vm);
   } else {
     assert(false);
   }
@@ -3486,6 +3518,10 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
   }
 }
 
+void lllllllllll(MapPair *pair, void *data) {
+  printf("lllll: %s\n", pair->key);
+}
+
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] == '#') {
     int offset = (int)strtod(value + 1, NULL);
@@ -3506,9 +3542,27 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     return new_inst(I_LOAD, zv);
   } else if (value[0] == '.') {
     MapPair *pair = map_get(vm->symbols, value + 1);
-    assert(pair != NULL);
-    ZValue *f = (ZValue *)(pair->value);
-    return new_inst(I_LOAD, f);
+    if (pair != NULL) {
+      ZValue *f = (ZValue *)(pair->value);
+      return new_inst(I_LOAD, f);
+    } else {
+      ZValue *vf = (ZValue *)malloc(sizeof(ZValue));
+      vf->type = VAL_FUNC;
+      ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+      v->type = VAL_REF;
+      v->data.ptr = vf;
+      INSTRUCTION *inst = new_inst(I_LOAD, v);
+      MapPair *pair = map_get(vm->ready_link, value);
+      if (pair == NULL) {
+        struct Vec *store = new_vec();
+        store->push(store, inst);
+        map_insert(vm->ready_link, value + 1, store);
+        return inst;
+      }
+      struct Vec *store = pair->value;
+      store->push(store, inst);
+      return inst;
+    }
   } else {
     int offset = (int)strtod(value, NULL);
     ZValue *zv = (ZValue *)malloc(sizeof(ZValue));

@@ -1,46 +1,48 @@
 include("std");
 
-typedef _int_ref_ {
-data:
-  int;
-show:
-  object;
-};
-
-func customShow() { print(this.data); }
-
-func Int(a) { return new _int_ref_{data = a, show = customShow}; }
-
 typedef Custom {
 age:
   Int;
 next:
   Custom;
+__str__:
+  object;
 };
+
+func showCustom() {
+  __print("Custom age is ");
+  print(this.age);
+  if (this.next != null) {
+    print("---call next start---");
+    print(this.next);
+    print("---call next end---");
+  }
+}
 
 func main() {
   var a = Int(1);
   var b = Int(2);
 
-  a.show();
+  print(a);
 
-  b.show();
   print(a.data);
   print(b.data);
   swap(a, b);
   print(a.data);
   print(b.data);
 
-  a = new Custom{
-      age = a,
-  };
+  a = new Custom{age = a, __str__ = showCustom};
 
-  b = new Custom{age = b, next = a};
+  b = new Custom{age = b, next = a, __str__ = showCustom};
 
   print(a);
   print(b);
 
-  b = new Custom{age = b.age, next = b};
+  b = new Custom{age = b.age, next = b, __str__ = showCustom};
 
   print(b);
+
+  var x = Bool(false);
+
+  print(x);
 }

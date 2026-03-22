@@ -31,6 +31,28 @@ func max(a, b) {
   }
 }
 
+typedef __bool_ref {
+data:
+  bool;
+__str__:
+  object;
+};
+
+func __bool_print() { __print(this.data); }
+
+func Bool(a) { return new __bool_ref{data = a, __str__ = __bool_print}; }
+
+func __int_print() { __print(this.data); }
+
+typedef __int_ref {
+data:
+  int;
+__str__:
+  object;
+};
+
+func Int(a) { return new __int_ref{data = a, __str__ = __int_print}; }
+
 /*
  * Returns the sum of two numbers.
  */

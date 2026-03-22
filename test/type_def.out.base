@@ -1,9 +1,24 @@
 1
-2
 1
 2
 2
 1
-{"age":{"data":2, "show":[FUNCTION customShow]}, "next":null}
-{"age":{"data":1, "show":[FUNCTION customShow]}, "next":{"age":{"data":2, "show":[FUNCTION customShow]}, "next":null}}
-{"age":{"data":1, "show":[FUNCTION customShow]}, "next":{"age":{"data":1, "show":[FUNCTION customShow]}, "next":{"age":{"data":2, "show":[FUNCTION customShow]}, "next":null}}}
+"Custom age is "2
+
+"Custom age is "1
+"---call next start---"
+"Custom age is "2
+
+"---call next end---"
+
+"Custom age is "1
+"---call next start---"
+"Custom age is "1
+"---call next start---"
+"Custom age is "2
+
+"---call next end---"
+
+"---call next end---"
+
+false

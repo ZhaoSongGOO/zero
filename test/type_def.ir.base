@@ -1,22 +1,40 @@
 __init__:
-customShow:
+showCustom:
+  PUSH_S "Custom age is "
+  CALL __print
+  FREE 1
+  LOAD [ei]
+  FREE 1
   LOAD #-1
-  PUSH_S data
+  PUSH_S age
   GET
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
-Int:
-  PUSH_S data
-  LOAD #-0
-  CHECK 1
-  PUSH_S show
-  LOAD .customShow
-  CHECK 5
-  PUSH_D 2
-  CALL NEW_OBJECT
-  STORE [ei]
+  LOAD #-1
+  PUSH_S next
+  GET
+  PUSH_N
+  NE
+  JF 17
+  PUSH_S "---call next start---"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #-1
+  PUSH_S next
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  PUSH_S "---call next end---"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
 main:
   PUSH_D 1
   CALL Int
@@ -29,19 +47,8 @@ main:
   LOAD [ei]
   STORE #2
   LOAD #1
-  COPY
-  PUSH_S show
-  GET
-  CALL -0
-  FREE 2
-  LOAD [ei]
+  CALL print
   FREE 1
-  LOAD #2
-  COPY
-  PUSH_S show
-  GET
-  CALL -0
-  FREE 2
   LOAD [ei]
   FREE 1
   LOAD #1
@@ -82,9 +89,12 @@ main:
   PUSH_S age
   LOAD #1
   CHECK 6
+  PUSH_S __str__
+  LOAD .showCustom
+  CHECK 5
   PUSH_S next
   PUSH_N
-  PUSH_D 2
+  PUSH_D 3
   CALL NEW_OBJECT
   ASSIGN
   STORE #1
@@ -92,10 +102,13 @@ main:
   PUSH_S age
   LOAD #2
   CHECK 6
+  PUSH_S __str__
+  LOAD .showCustom
+  CHECK 5
   PUSH_S next
   LOAD #1
   CHECK 6
-  PUSH_D 2
+  PUSH_D 3
   CALL NEW_OBJECT
   ASSIGN
   STORE #2
@@ -115,14 +128,27 @@ main:
   PUSH_S age
   GET
   CHECK 6
+  PUSH_S __str__
+  LOAD .showCustom
+  CHECK 5
   PUSH_S next
   LOAD #2
   CHECK 6
-  PUSH_D 2
+  PUSH_D 3
   CALL NEW_OBJECT
   ASSIGN
   STORE #2
   LOAD #2
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  PUSH_B 0
+  CALL Bool
+  FREE 1
+  LOAD [ei]
+  STORE #3
+  LOAD #3
   CALL print
   FREE 1
   LOAD [ei]
