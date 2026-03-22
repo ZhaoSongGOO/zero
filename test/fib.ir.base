@@ -83,11 +83,12 @@ main:
   LOAD #2
   PUSH_S engine
   GET
+  COPY
   PUSH_S compute
   GET
   PUSH_D 10
   CALL -1
-  FREE 2
+  FREE 3
   LOAD [ei]
   STORE #3
   PUSH_S "Result for 10th Fib:"
@@ -108,10 +109,11 @@ main:
   LOAD #2
   PUSH_S engine
   GET
+  COPY
   PUSH_S runBatch
   GET
   PUSH_D 10
   CALL -1
-  FREE 2
+  FREE 3
   LOAD [ei]
   FREE 1

@@ -297,12 +297,13 @@ main:
   CALL NEW_OBJECT
   STORE #13
   LOAD #13
+  COPY
   PUSH_S run
   GET
   PUSH_D 5
   PUSH_S "Iam running"
   CALL -2
-  FREE 3
+  FREE 4
   LOAD [ei]
   FREE 1
   PUSH_D 1
@@ -368,11 +369,12 @@ main:
   LOAD #15
   PUSH_S owner
   GET
+  COPY
   PUSH_S run
   GET
   PUSH_D 3
   PUSH_S "owner running"
   CALL -2
-  FREE 3
+  FREE 4
   LOAD [ei]
   FREE 1

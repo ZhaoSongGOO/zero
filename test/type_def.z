@@ -3,12 +3,13 @@ include("std");
 typedef _int_ref_ {
 data:
   int;
-__str__: object;
+show:
+  object;
 };
 
-func Int(a){
-  return new _int_ref_{data = a};
-}
+func customShow() { print(this.data); }
+
+func Int(a) { return new _int_ref_{data = a, show = customShow}; }
 
 typedef Custom {
 age:
@@ -21,6 +22,9 @@ func main() {
   var a = Int(1);
   var b = Int(2);
 
+  a.show();
+
+  b.show();
   print(a.data);
   print(b.data);
   swap(a, b);
@@ -36,10 +40,7 @@ func main() {
   print(a);
   print(b);
 
-  b = new Custom{
-    age = b.age,
-    next = b
-  };
+  b = new Custom{age = b.age, next = b};
 
   print(b);
 }

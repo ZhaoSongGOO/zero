@@ -1,10 +1,19 @@
 __init__:
+customShow:
+  LOAD #-1
+  PUSH_S data
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
 Int:
   PUSH_S data
   LOAD #-0
   CHECK 1
-  PUSH_S __str__
-  PUSH_N
+  PUSH_S show
+  LOAD .customShow
+  CHECK 5
   PUSH_D 2
   CALL NEW_OBJECT
   STORE [ei]
@@ -19,6 +28,22 @@ main:
   FREE 1
   LOAD [ei]
   STORE #2
+  LOAD #1
+  COPY
+  PUSH_S show
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  COPY
+  PUSH_S show
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  FREE 1
   LOAD #1
   PUSH_S data
   GET

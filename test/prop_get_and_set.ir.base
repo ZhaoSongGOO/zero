@@ -44,10 +44,11 @@ main:
   LOAD [ei]
   FREE 1
   LOAD #1
+  COPY
   PUSH_S action
   GET
   CALL -0
-  FREE 1
+  FREE 2
   LOAD [ei]
   FREE 1
   LOAD #1
@@ -66,10 +67,11 @@ main:
   LOAD .as
   SET
   LOAD #1
+  COPY
   PUSH_S action
   GET
   CALL -0
-  FREE 1
+  FREE 2
   LOAD [ei]
   FREE 1
   PUSH_S kernel
@@ -89,10 +91,11 @@ main:
   LOAD #2
   PUSH_S kernel
   GET
+  COPY
   PUSH_S action
   GET
   CALL -0
-  FREE 1
+  FREE 2
   LOAD [ei]
   FREE 1
   LOAD #2
@@ -104,20 +107,22 @@ main:
   LOAD #2
   PUSH_S kernel
   GET
+  COPY
   PUSH_S action
   GET
   PUSH_D 3
   PUSH_S "haha"
   CALL -2
-  FREE 3
+  FREE 4
   LOAD [ei]
   FREE 1
   LOAD #1
+  COPY
   PUSH_S action
   GET
   PUSH_D 3
   PUSH_S "oooo"
   CALL -2
-  FREE 3
+  FREE 4
   LOAD [ei]
   FREE 1

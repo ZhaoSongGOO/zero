@@ -55,6 +55,7 @@ typedef enum {
   TOKEN_COLON,         // :
   TOKEN_TYPE_DEF,      // typedef
   TOKEN_NEW,           // new
+  TOKEN_THIS,          // this
   TOKEN_EOF
 } TOKEN_TYPE;
 
@@ -256,7 +257,8 @@ bool is_keyword(const char *str) {
          strcmp(str, "return") == 0 || strcmp(str, "if") == 0 ||
          strcmp(str, "else") == 0 || strcmp(str, "while") == 0 ||
          strcmp(str, "include") == 0 || strcmp(str, "null") == 0 ||
-         strcmp(str, "typedef") == 0 || strcmp(str, "new") == 0;
+         strcmp(str, "typedef") == 0 || strcmp(str, "new") == 0 ||
+         strcmp(str, "this") == 0;
 }
 
 struct token scanner_letter(struct scanner *s) {
@@ -311,6 +313,10 @@ struct token scanner_letter(struct scanner *s) {
 
     if (strcmp(str, "new") == 0) {
       return (struct token){.type = TOKEN_NEW};
+    }
+
+    if (strcmp(str, "this") == 0) {
+      return (struct token){.type = TOKEN_THIS};
     }
 
     return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
@@ -812,6 +818,7 @@ struct syntax_expr {
       int var_index;
       bool is_from_top;     // if var defined from global.
       bool may_be_function; // {"a":f}, `f` may be a function.
+      bool is_this;
     } identifier_expr;
 
     struct {
@@ -1626,38 +1633,54 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
         parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
     return str;
   }
-  case TOKEN_ID: {
+  case TOKEN_ID:
+  case TOKEN_THIS: {
     struct token n = parser->sc->cur_token;
-    expected_token_type_and_run(parser->sc, TOKEN_ID);
+    bool is_this = parser->sc->cur_token.type == TOKEN_THIS;
+    if (is_this) {
+      expected_token_type_and_run(parser->sc, TOKEN_THIS);
+    } else {
+      expected_token_type_and_run(parser->sc, TOKEN_ID);
+    }
     struct syntax_expr *id =
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
     id->type = EXPR_ID;
-    id->data.identifier_expr.may_be_function = false;
-    id->data.identifier_expr.from_params = false;
-    id->data.identifier_expr.name =
-        parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)->str;
-    MapPair *variable_define_form_var = get_variables_from_parser_scope(
-        parser->cur_scope, id->data.identifier_expr.name);
-    MapPair *variable_define_from_params =
-        map_get(parser->cur_scope->params, id->data.identifier_expr.name);
-    if (variable_define_from_params == NULL &&
-        variable_define_form_var == NULL &&
-        parser->sc->cur_token.type != TOKEN_LEFT_PARENT) {
-      // printf("Variable(%s) not defined, but may be a function?\n",
-      //        id->data.identifier_expr.name);
-      id->data.identifier_expr.may_be_function = true;
-      return id;
-    }
-    if (variable_define_from_params != NULL) {
-      id->data.identifier_expr.from_params = true;
-      id->data.identifier_expr.offset = (int)variable_define_from_params->value;
-    } else {
-      id->data.identifier_expr.is_from_top = !get_var_in_scope_without_top(
+    id->data.identifier_expr.is_this = is_this;
+    if (!is_this) {
+      id->data.identifier_expr.may_be_function = false;
+      id->data.identifier_expr.from_params = false;
+      id->data.identifier_expr.name =
+          parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)
+              ->str;
+      MapPair *variable_define_form_var = get_variables_from_parser_scope(
           parser->cur_scope, id->data.identifier_expr.name);
+      MapPair *variable_define_from_params =
+          map_get(parser->cur_scope->params, id->data.identifier_expr.name);
+      if (variable_define_from_params == NULL &&
+          variable_define_form_var == NULL &&
+          parser->sc->cur_token.type != TOKEN_LEFT_PARENT) {
+        // printf("Variable(%s) not defined, but may be a function?\n",
+        //        id->data.identifier_expr.name);
+        id->data.identifier_expr.may_be_function = true;
+        return id;
+      }
+      if (variable_define_from_params != NULL) {
+        id->data.identifier_expr.from_params = true;
+        id->data.identifier_expr.offset =
+            (int)variable_define_from_params->value;
+      } else {
+        id->data.identifier_expr.is_from_top = !get_var_in_scope_without_top(
+            parser->cur_scope, id->data.identifier_expr.name);
 
-      id->data.identifier_expr.var_index = get_var_index_in_scope(
-          parser->cur_scope, id->data.identifier_expr.name);
+        id->data.identifier_expr.var_index = get_var_index_in_scope(
+            parser->cur_scope, id->data.identifier_expr.name);
+      }
     }
+
+    if (is_this) {
+      id->data.identifier_expr.offset = parser->cur_scope->params->count;
+    }
+
     if (parser->sc->cur_token.type == TOKEN_ACCESS) {
       struct syntax_expr *access_expr =
           (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
@@ -1777,6 +1800,7 @@ void expression_unary_visitor(struct syntax_expr *expr);
 void expression_array_visitor(struct syntax_expr *expr);
 void expression_object_visitor(struct syntax_expr *expr);
 void expression_access_visitor(struct syntax_expr *expr);
+void expression_access_visitor_for_call(struct syntax_expr *expr);
 void expression_new_visitor(struct syntax_expr *expr);
 void expression_call_visitor(struct syntax_expr *expr);
 void program_visitor(struct syntax_program *program);
@@ -2078,23 +2102,29 @@ void statement_stmt_expr_visitor(struct syntax_statement *statement) {
 void expression_visitor(struct syntax_expr *expr) {
   switch (expr->type) {
   case EXPR_ID: {
-    if (expr->data.identifier_expr.may_be_function) {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD .%s", // function name
-                       expr->data.identifier_expr.name);
+    if (expr->data.identifier_expr.is_this) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
+                       expr->data.identifier_expr.offset + 1);
     } else {
-      if (expr->data.identifier_expr.from_params) {
-        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
-                         expr->data.identifier_expr.offset);
+      if (expr->data.identifier_expr.may_be_function) {
+        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD .%s", // function name
+                         expr->data.identifier_expr.name);
       } else {
-        if (expr->data.identifier_expr.is_from_top) {
-          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
-                           expr->data.identifier_expr.var_index);
+        if (expr->data.identifier_expr.from_params) {
+          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
+                           expr->data.identifier_expr.offset);
         } else {
-          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d",
-                           expr->data.identifier_expr.var_index + 1); // bp+d
+          if (expr->data.identifier_expr.is_from_top) {
+            INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
+                             expr->data.identifier_expr.var_index);
+          } else {
+            INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d",
+                             expr->data.identifier_expr.var_index + 1); // bp+d
+          }
         }
       }
     }
+
   } break;
   case EXPR_BINARY:
     expression_binary_visitor(expr);
@@ -2158,6 +2188,20 @@ void expression_access_visitor(struct syntax_expr *expr) {
   }
   // TODO: support pass this ptr, may be use.
   // expression_visitor(expr->data.access_expr.obj);
+}
+
+void expression_access_visitor_for_call(struct syntax_expr *expr) {
+  assert(expr->type == EXPR_ACCESS);
+  expression_visitor(expr->data.access_expr.obj);
+  for (int i = 0; i < expr->data.access_expr.props->count; i++) {
+    if (i == expr->data.access_expr.props->count - 1) {
+      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "COPY");
+    }
+    const char *prop =
+        expr->data.access_expr.props->get(expr->data.access_expr.props, i);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", prop);
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "GET");
+  }
 }
 
 // LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL
@@ -2286,7 +2330,7 @@ a.name(1, 2)
 void expression_call_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_CALL);
   if (expr->data.call_expr.source_in_stack) {
-    expression_visitor(expr->data.call_expr.source);
+    expression_access_visitor_for_call(expr->data.call_expr.source);
   }
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
@@ -2301,7 +2345,7 @@ void expression_call_visitor(struct syntax_expr *expr) {
   }
   if (expr->data.call_expr.source_in_stack) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
-                     expr->data.call_expr.args->count + 1);
+                     expr->data.call_expr.args->count + 2); // function and this
   } else {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                      expr->data.call_expr.args->count);
@@ -2392,7 +2436,8 @@ typedef enum {
   I_JF, // if stack top is true, jump, else do nothing
   I_GET,
   I_SET,
-  I_CHECK
+  I_CHECK,
+  I_COPY
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2491,6 +2536,7 @@ INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_GET_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2520,6 +2566,7 @@ void init_actions() {
   map_insert(actions, "GET", NEW_GET_INSTRUCTION);
   map_insert(actions, "SET", NEW_SET_INSTRUCTION);
   map_insert(actions, "CHECK", NEW_CHECK_INSTRUCTION);
+  map_insert(actions, "COPY", NEW_COPY_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -3160,11 +3207,6 @@ void SET_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
-void COPY_INST_RUN(VM *vm, ZValue *value) {
-  ZValue *src = vm->stacks[vm->sp];
-  vm->stacks[vm->sp] = copy(src);
-}
-
 const char *get_type_str(int type) {
   switch (type) {
   case VAL_INT:
@@ -3207,6 +3249,12 @@ void CHECK_INST_RUN(VM *vm, ZValue *value) {
   } else {
     ZERO_ASSERT(type > TYPE_UNKNOWN && type <= TYPE_CUSTOM, "TYPE unknown");
   }
+}
+
+void COPY_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *src = vm->stacks[vm->sp];
+  assert(src->type == VAL_REF);
+  vm->stacks[++vm->sp] = src;
 }
 
 void GET_INST_RUN(VM *vm, ZValue *value) {
@@ -3313,6 +3361,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_CHECK:
       CHECK_INST_RUN(vm, inst->v);
       break;
+    case I_COPY:
+      COPY_INST_RUN(vm, inst->v);
+      break;
     default:
       assert(false);
     }
@@ -3378,6 +3429,7 @@ void __INIT__RUN(VM *vm, ZValue *value) {
     case I_JUMP:
     case I_JF:
     case I_CHECK:
+    case I_COPY:
     default:
       assert(false);
     }
@@ -3602,6 +3654,9 @@ INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value) {
   v->type = VAL_INT;
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_CHECK, v);
+}
+INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_COPY, NULL);
 }
 
 const char *append_suffix(const char *m) {

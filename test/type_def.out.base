@@ -1,7 +1,9 @@
 1
 2
+1
+2
 2
 1
-{"age":{"data":2, "__str__":null}, "next":null}
-{"age":{"data":1, "__str__":null}, "next":{"age":{"data":2, "__str__":null}, "next":null}}
-{"age":{"data":1, "__str__":null}, "next":{"age":{"data":1, "__str__":null}, "next":{"age":{"data":2, "__str__":null}, "next":null}}}
+{"age":{"data":2, "show":[FUNCTION customShow]}, "next":null}
+{"age":{"data":1, "show":[FUNCTION customShow]}, "next":{"age":{"data":2, "show":[FUNCTION customShow]}, "next":null}}
+{"age":{"data":1, "show":[FUNCTION customShow]}, "next":{"age":{"data":1, "show":[FUNCTION customShow]}, "next":{"age":{"data":2, "show":[FUNCTION customShow]}, "next":null}}}
