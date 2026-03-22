@@ -1,0 +1,60 @@
+__init__:
+_show:
+  LOAD #-1
+  PUSH_S data
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+_add:
+  LOAD #-1
+  PUSH_S data
+  LOAD #-1
+  PUSH_S data
+  GET
+  PUSH_D 1
+  ADD
+  SET
+new_number:
+  PUSH_S data
+  LOAD #-0
+  CHECK 1
+  PUSH_S add
+  LOAD ._add
+  CHECK 5
+  PUSH_S show
+  LOAD ._show
+  CHECK 5
+  PUSH_D 3
+  CALL NEW_OBJECT
+  STORE [ei]
+main:
+  PUSH_D 1
+  CALL new_number
+  FREE 1
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  PUSH_S data
+  GET
+  PUSH_D 10
+  L
+  JF 17
+  LOAD #1
+  COPY
+  PUSH_S show
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S add
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  JUMP -22

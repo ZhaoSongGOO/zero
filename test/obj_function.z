@@ -1,0 +1,22 @@
+func _show() { print(this.data); }
+
+func _add() { this.data = this.data + 1; }
+
+typedef Number {
+data:
+  int;
+add:
+  object;
+show:
+  object;
+};
+
+func new_number(d) { return new Number{data = d, add = _add, show = _show}; }
+
+func main() {
+  var n = new_number(1);
+  while (n.data < 10) {
+    n.show();
+    n.add();
+  }
+}
