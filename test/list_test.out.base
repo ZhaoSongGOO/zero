@@ -1,0 +1,29 @@
+{"root":null, "count":0, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":null}
+0
+{"root":{"data":1, "next":null}, "count":1, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":{"data":1, "next":null}}
+1
+{"root":{"data":1, "next":{"data":2, "next":null}}, "count":2, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":{"data":2, "next":null}}
+2
+{"root":{"data":1, "next":{"data":2, "next":{"data":3, "next":null}}}, "count":3, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":{"data":3, "next":null}}
+3
+{"root":{"data":1, "next":{"data":2, "next":{"data":3, "next":{"data":4, "next":null}}}}, "count":4, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":{"data":4, "next":null}}
+4
+{"root":{"data":1, "next":{"data":2, "next":{"data":3, "next":{"data":4, "next":{"data":5, "next":null}}}}}, "count":5, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":{"data":5, "next":null}}
+5
+{"root":{"data":1, "next":{"data":2, "next":{"data":3, "next":{"data":4, "next":{"data":5, "next":{"data":6, "next":null}}}}}}, "count":6, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "tail":{"data":6, "next":null}}
+6
+"------------"
+1
+2
+3
+4
+5
+6
+null
+1
+2
+3
+4
+5
+6
+null

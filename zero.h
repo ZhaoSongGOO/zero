@@ -791,6 +791,8 @@ struct syntax_expr {
     } binary_expr;
 
     struct {
+      bool is_from_params;
+      int offset;
       bool source_in_stack;
       char *func_name;
       struct syntax_expr *source;
@@ -1730,6 +1732,9 @@ struct syntax_expr *parser_call(struct syntax_expr *caller,
   call->data.call_expr.source_in_stack = false;
   if (caller->type == EXPR_ID) {
     call->data.call_expr.func_name = caller->data.identifier_expr.name;
+    call->data.call_expr.is_from_params =
+        caller->data.identifier_expr.from_params;
+    call->data.call_expr.offset = caller->data.identifier_expr.offset;
   } else if (caller->type == EXPR_ACCESS) {
     call->data.call_expr.source_in_stack = true;
     call->data.call_expr.source = caller;
@@ -2332,11 +2337,19 @@ void expression_call_visitor(struct syntax_expr *expr) {
   if (expr->data.call_expr.source_in_stack) {
     expression_access_visitor_for_call(expr->data.call_expr.source);
   }
+
+  if (expr->data.call_expr.is_from_params) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d",
+                     expr->data.call_expr.offset);
+  }
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
         expr->data.call_expr.args->get(expr->data.call_expr.args, i));
   }
   if (expr->data.call_expr.source_in_stack) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
+                     expr->data.call_expr.args->count);
+  } else if (expr->data.call_expr.is_from_params) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
                      expr->data.call_expr.args->count);
   } else {
@@ -2346,6 +2359,9 @@ void expression_call_visitor(struct syntax_expr *expr) {
   if (expr->data.call_expr.source_in_stack) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                      expr->data.call_expr.args->count + 2); // function and this
+  } else if (expr->data.call_expr.is_from_params) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
+                     expr->data.call_expr.args->count + 1); // function
   } else {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                      expr->data.call_expr.args->count);
@@ -2868,9 +2884,9 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
     return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
   } else if (v->type == VAL_NULL) {
     return 0;
-  } else if(v->type == VAL_OBJ_PTR){
+  } else if (v->type == VAL_OBJ_PTR) {
     return (int)v->data.ptr;
-  }else{
+  } else {
     assert(false);
   }
 }

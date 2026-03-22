@@ -69,3 +69,75 @@ func feb(a) {
 
   return feb(a - 1) + feb(a - 2);
 }
+
+typedef __list_node {
+data:
+  object;
+next:
+  __list_node;
+};
+
+typedef __list {
+root:
+  __list_node;
+tail:
+  __list_node;
+count:
+  int;
+push:
+  object;
+each:
+  object;
+get:
+  object;
+};
+
+func __list_push(v) {
+  var l = new __list_node{data = v};
+  if (this.root == null) {
+    this.tail = l;
+    this.root = l;
+  } else {
+    this.tail.next = l;
+    this.tail = l;
+  }
+  this.count = this.count + 1;
+}
+
+func __list_each(action) {
+  if (this.root == null) {
+    return null;
+  }
+
+  var i = this.root;
+  while (i != null) {
+    action(i.data);
+    i = i.next;
+  }
+}
+
+func __list_get(index) {
+  if (index >= this.count) {
+    return null;
+  }
+
+  if (index < 0) {
+    return null;
+  }
+
+  var i = this.root;
+  var j = 0;
+  while (i != null) {
+    if (j == index) {
+      return i.data;
+    }
+    j = j + 1;
+    i = i.next;
+  }
+  return null;
+}
+
+func List() {
+  return new __list{push = __list_push, count = 0, each = __list_each,
+                    get = __list_get};
+}

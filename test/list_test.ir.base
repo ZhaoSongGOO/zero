@@ -1,0 +1,213 @@
+__init__:
+show:
+  LOAD #-0
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+main:
+  CALL List
+  FREE 0
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 1
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 2
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 3
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 4
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 5
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 6
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  PUSH_S "------------"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S each
+  GET
+  LOAD .show
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  PUSH_D 1
+  NEGATE
+  STORE #2
+  LOAD #2
+  LOAD #1
+  PUSH_S count
+  GET
+  LE
+  JF 22
+  LOAD #1
+  COPY
+  PUSH_S get
+  GET
+  LOAD #2
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  STORE #3
+  LOAD #3
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #2
+  LOAD #2
+  PUSH_D 1
+  ADD
+  ASSIGN
+  STORE #2
+  FREE 1
+  JUMP -27
