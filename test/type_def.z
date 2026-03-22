@@ -1,9 +1,14 @@
 include("std");
 
-typedef Int {
+typedef _int_ref_ {
 data:
   int;
+__str__: object;
 };
+
+func Int(a){
+  return new _int_ref_{data = a};
+}
 
 typedef Custom {
 age:
@@ -13,8 +18,8 @@ next:
 };
 
 func main() {
-  var a = new Int{data = 1};
-  var b = new Int{data = 2};
+  var a = Int(1);
+  var b = Int(2);
 
   print(a.data);
   print(b.data);

@@ -238,7 +238,7 @@ bool is_white_space(char c) { return c == ' ' || c == '\n' || c == '\t'; }
 bool is_number(char c) { return c >= '0' && c <= '9'; }
 
 bool is_letter(char c) {
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
 }
 
 bool is_opcode(char c) {
@@ -928,6 +928,7 @@ struct zero_type {
     TYPE_BOOL,
     TYPE_STR,
     TYPE_OBJ,
+    TYPE_CUSTOM
   } type;
 
   const char *name;
@@ -943,8 +944,10 @@ struct zero_type *get_zero_type(const char *str) {
     t->type = TYPE_BOOL;
   } else if (strcmp(str, "string") == 0) {
     t->type = TYPE_STR;
-  } else {
+  } else if (strcmp(str, "object") == 0) {
     t->type = TYPE_OBJ;
+  } else {
+    t->type = TYPE_CUSTOM;
     t->name = str;
   }
   return t;
@@ -2520,13 +2523,16 @@ void init_actions() {
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_REF;
   ZValue *b_print = (ZValue *)malloc(sizeof(ZValue));
   b_print->type = VAL_FUNC;
   ZFunction *func = new_function();
   func->is_builtin = true;
   func->name = name;
   b_print->data.ptr = func;
-  return b_print;
+  v->data.ptr = b_print;
+  return v;
 }
 
 void init_builtin(VM *vm) {
@@ -2560,10 +2566,13 @@ void list_inst_store(MapPair *pair, void *data) {
     f->instructions->push(f->instructions, inst);
   }
 
-  ZValue *value = (ZValue *)malloc(sizeof(ZValue));
-  value->type = VAL_FUNC;
-  value->data.ptr = f;
+  ZValue *fvalue = (ZValue *)malloc(sizeof(ZValue));
+  fvalue->type = VAL_FUNC;
+  fvalue->data.ptr = f;
 
+  ZValue *value = (ZValue *)malloc(sizeof(ZValue));
+  value->type = VAL_REF;
+  value->data.ptr = fvalue;
   if (strcmp(pair->key, "__init__") == 0) {
     vm->globals->push(vm->globals, value);
   } else {
@@ -2602,7 +2611,9 @@ void vm_link_progress(MapPair *pair, void *data) {
   for (int i = 0; i < funcs->count; i++) {
     INSTRUCTION *inst = (INSTRUCTION *)funcs->get(funcs, i);
     ZValue *zv = (ZValue *)r->value;
-    assert(zv->type == VAL_FUNC);
+    assert(zv->type == VAL_REF);
+    ZValue *f = (ZValue *)zv->data.ptr;
+    assert(f->type == VAL_FUNC);
     inst->v->data.ptr = zv->data.ptr;
   }
 }
@@ -3189,12 +3200,12 @@ void CHECK_INST_RUN(VM *vm, ZValue *value) {
     ZERO_ASSERT(need_check->type == VAL_STR_INDEX,
                 "expected type is string, but get %s",
                 get_type_str(need_check->type));
-  } else if (type == TYPE_OBJ) {
+  } else if (type == TYPE_OBJ || type == TYPE_CUSTOM) {
     ZERO_ASSERT(need_check->type == VAL_REF,
                 "expected type is object, but get %s",
                 get_type_str(need_check->type));
   } else {
-    ZERO_ASSERT(type > TYPE_UNKNOWN && type <= TYPE_OBJ, "TYPE unknown");
+    ZERO_ASSERT(type > TYPE_UNKNOWN && type <= TYPE_CUSTOM, "TYPE unknown");
   }
 }
 
@@ -3221,6 +3232,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   if (value->type == VAL_INT) {
     value = vm->stacks[vm->sp + value->data.i_val];
   }
+  assert(value->type == VAL_REF);
+  value = (ZValue *)value->data.ptr;
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
   Runnable *runnable = (Runnable *)malloc(sizeof(Runnable));
@@ -3319,6 +3332,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
 }
 
 void __INIT__RUN(VM *vm, ZValue *value) {
+  assert(value->type == VAL_REF);
+  value = (ZValue *)value->data.ptr;
   assert(value->type == VAL_FUNC);
   ZFunction *func = (ZFunction *)(value->data.ptr);
 
@@ -3488,8 +3503,11 @@ INSTRUCTION *NEW_PUSH_N_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] != '-') {
+    ZValue *vf = (ZValue *)malloc(sizeof(ZValue));
+    vf->type = VAL_FUNC;
     ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-    v->type = VAL_FUNC;
+    v->type = VAL_REF;
+    v->data.ptr = vf;
     INSTRUCTION *inst = new_inst(I_CALL, v);
     MapPair *pair = map_get(vm->ready_link, value);
     if (pair == NULL) {

@@ -2,6 +2,6 @@
 2
 2
 1
-{"age":{"data":2}, "next":null}
-{"age":{"data":1}, "next":{"age":{"data":2}, "next":null}}
-{"age":{"data":1}, "next":{"age":{"data":1}, "next":{"age":{"data":2}, "next":null}}}
+{"age":{"data":2, "__str__":null}, "next":null}
+{"age":{"data":1, "__str__":null}, "next":{"age":{"data":2, "__str__":null}, "next":null}}
+{"age":{"data":1, "__str__":null}, "next":{"age":{"data":1, "__str__":null}, "next":{"age":{"data":2, "__str__":null}, "next":null}}}
