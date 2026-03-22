@@ -30,4 +30,11 @@ func main() {
 
   print(a);
   print(b);
+
+  b = new Custom{
+    age = b.age,
+    next = b
+  };
+
+  print(b);
 }

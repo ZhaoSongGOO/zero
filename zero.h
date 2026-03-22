@@ -58,6 +58,30 @@ typedef enum {
   TOKEN_EOF
 } TOKEN_TYPE;
 
+void ZERO_ASSERT(bool condition, const char *fmt, ...) {
+  if (condition) {
+    return;
+  }
+
+  char *buf = NULL;
+  if (fmt != NULL) {
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    if (len < 0) {
+      assert(false);
+    }
+    buf = malloc(len + 1);
+    va_start(args, fmt);
+    vsnprintf(buf, len + 1, fmt, args);
+    va_end(args);
+  }
+
+  printf("[FATAL]: %s\n", buf);
+  assert(false);
+}
+
 typedef enum { NUMBER_INT, NUMBER_FLOAT, NUMBER_BOOL } NUMBER_Type;
 
 struct number {
@@ -896,6 +920,36 @@ struct syntax_program {
   struct Vec *include_paths;
 };
 
+struct zero_type {
+  enum {
+    TYPE_UNKNOWN,
+    TYPE_INT,
+    TYPE_FLOAT,
+    TYPE_BOOL,
+    TYPE_STR,
+    TYPE_OBJ,
+  } type;
+
+  const char *name;
+};
+
+struct zero_type *get_zero_type(const char *str) {
+  struct zero_type *t = (struct zero_type *)malloc(sizeof(struct zero_type));
+  if (strcmp(str, "int") == 0) {
+    t->type = TYPE_INT;
+  } else if (strcmp(str, "float") == 0) {
+    t->type = TYPE_FLOAT;
+  } else if (strcmp(str, "bool") == 0) {
+    t->type = TYPE_BOOL;
+  } else if (strcmp(str, "string") == 0) {
+    t->type = TYPE_STR;
+  } else {
+    t->type = TYPE_OBJ;
+    t->name = str;
+  }
+  return t;
+}
+
 struct type_def_meta_data {
   const char *type_name;
   Map *segments;
@@ -1046,8 +1100,9 @@ void parser_type_def(struct Parser *parser) {
         parser->sc->symbol
             ->get(parser->sc->symbol, parser->sc->cur_token.value.symbol_index)
             ->str;
+    struct zero_type *t = get_zero_type(value);
     expected_token_type_and_run(parser->sc, TOKEN_ID);
-    map_insert(meta_data->segments, key, value);
+    map_insert(meta_data->segments, key, t);
     expected_token_type_and_run(parser->sc, TOKEN_SEMICOLON);
   }
   expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACE);
@@ -2073,6 +2128,8 @@ void expression_new_visitor_helper(MapPair *pair, void *data) {
   MapPair *init_pair = map_get(expr->data.new_expr.init_list, pair->key);
   if (init_pair != NULL) {
     expression_visitor(init_pair->value);
+    struct zero_type *t = (struct zero_type *)pair->value;
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CHECK %d", t->type);
   } else {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_N");
   }
@@ -2331,7 +2388,8 @@ typedef enum {
   I_JUMP,
   I_JF, // if stack top is true, jump, else do nothing
   I_GET,
-  I_SET
+  I_SET,
+  I_CHECK
 } INSTRUCTION_CODE;
 
 struct zero_context {
@@ -2429,6 +2487,7 @@ INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_GET_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2457,6 +2516,7 @@ void init_actions() {
   map_insert(actions, "JF", NEW_JF_INSTRUCTION);
   map_insert(actions, "GET", NEW_GET_INSTRUCTION);
   map_insert(actions, "SET", NEW_SET_INSTRUCTION);
+  map_insert(actions, "CHECK", NEW_CHECK_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -3094,6 +3154,50 @@ void COPY_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[vm->sp] = copy(src);
 }
 
+const char *get_type_str(int type) {
+  switch (type) {
+  case VAL_INT:
+    return "int";
+  case VAL_FLOAT:
+    return "float";
+  case VAL_BOOL:
+    return "bool";
+  case VAL_STR_INDEX:
+    return "string";
+  case VAL_REF:
+    return "object";
+  default:
+    return "unknown";
+  }
+}
+
+void CHECK_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *need_check = vm->stacks[vm->sp];
+  int type = value->data.i_val;
+  if (type == TYPE_INT) {
+    ZERO_ASSERT(need_check->type == VAL_INT, "expected type is int, but get %s",
+                get_type_str(need_check->type));
+  } else if (type == TYPE_FLOAT) {
+    ZERO_ASSERT(need_check->type == VAL_FLOAT,
+                "expected type is float, but get %s",
+                get_type_str(need_check->type));
+  } else if (type == TYPE_BOOL) {
+    ZERO_ASSERT(need_check->type == VAL_BOOL,
+                "expected type is bool, but get %s",
+                get_type_str(need_check->type));
+  } else if (type == TYPE_STR) {
+    ZERO_ASSERT(need_check->type == VAL_STR_INDEX,
+                "expected type is string, but get %s",
+                get_type_str(need_check->type));
+  } else if (type == TYPE_OBJ) {
+    ZERO_ASSERT(need_check->type == VAL_REF,
+                "expected type is object, but get %s",
+                get_type_str(need_check->type));
+  } else {
+    ZERO_ASSERT(type > TYPE_UNKNOWN && type <= TYPE_OBJ, "TYPE unknown");
+  }
+}
+
 void GET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
@@ -3193,6 +3297,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_SET:
       SET_INST_RUN(vm, inst->v);
       break;
+    case I_CHECK:
+      CHECK_INST_RUN(vm, inst->v);
+      break;
     default:
       assert(false);
     }
@@ -3255,6 +3362,7 @@ void __INIT__RUN(VM *vm, ZValue *value) {
     case I_FREE:
     case I_JUMP:
     case I_JF:
+    case I_CHECK:
     default:
       assert(false);
     }
@@ -3469,6 +3577,13 @@ INSTRUCTION *NEW_GET_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_SET, NULL);
+}
+
+INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value) {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_INT;
+  v->data.i_val = (int)strtod(value, NULL);
+  return new_inst(I_CHECK, v);
 }
 
 const char *append_suffix(const char *m) {
