@@ -1,0 +1,93 @@
+__init__:
+action:
+  LOAD #-0
+  PUSH_S key
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #-0
+  PUSH_S value
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+main:
+  CALL Map
+  FREE 0
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  COPY
+  PUSH_S insert
+  GET
+  PUSH_D 10
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  PUSH_D 1
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S insert
+  GET
+  PUSH_D 20
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  PUSH_D 2
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S insert
+  GET
+  PUSH_D 30
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  PUSH_D 1
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S each
+  GET
+  LOAD .action
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1

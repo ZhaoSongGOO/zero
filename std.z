@@ -32,26 +32,26 @@ func max(a, b) {
 }
 
 typedef __bool_ref {
-data:
+__data__:
   bool;
 __str__:
   object;
 };
 
-func __bool_print() { __print(this.data); }
+func __bool_print() { __print(this.__data__); }
 
-func Bool(a) { return new __bool_ref{data = a, __str__ = __bool_print}; }
+func Bool(a) { return new __bool_ref{__data__ = a, __str__ = __bool_print}; }
 
-func __int_print() { __print(this.data); }
+func __int_print() { __print(this.__data__); }
 
 typedef __int_ref {
-data:
+__data__:
   int;
 __str__:
   object;
 };
 
-func Int(a) { return new __int_ref{data = a, __str__ = __int_print}; }
+func Int(a) { return new __int_ref{__data__ = a, __str__ = __int_print}; }
 
 /*
  * Returns the sum of two numbers.
@@ -71,7 +71,7 @@ func feb(a) {
 }
 
 typedef __list_node {
-data:
+__data__:
   object;
 next:
   __list_node;
@@ -93,7 +93,7 @@ get:
 };
 
 func __list_push(v) {
-  var l = new __list_node{data = v};
+  var l = new __list_node{__data__ = v};
   if (this.root == null) {
     this.tail = l;
     this.root = l;
@@ -111,7 +111,7 @@ func __list_each(action) {
 
   var i = this.root;
   while (i != null) {
-    action(i.data);
+    action(i.__data__);
     i = i.next;
   }
 }
@@ -129,7 +129,7 @@ func __list_get(index) {
   var j = 0;
   while (i != null) {
     if (j == index) {
-      return i.data;
+      return i.__data__;
     }
     j = j + 1;
     i = i.next;
@@ -140,4 +140,93 @@ func __list_get(index) {
 func List() {
   return new __list{push = __list_push, count = 0, each = __list_each,
                     get = __list_get};
+}
+
+typedef __map_node {
+key:
+  object;
+value:
+  object;
+left:
+  __map_node;
+right:
+  __map_node;
+};
+
+typedef __map {
+root:
+  __map_node;
+count:
+  int;
+insert:
+  object;
+find:
+  object;
+each:
+  object;
+};
+
+func __map_insert_helper(node, key, value) {
+  if (node.key.__data__ == key.__data__) {
+    node.value = value;
+    return node;
+  }
+  var b = node.key.__data__ < key.__data__;
+  if (b) {
+    if (node.left == null) {
+      node.left = new __map_node{key = key, value = value};
+      return node.left;
+    } else {
+      return __map_insert_helper(node.left, key, value);
+    }
+  } else {
+    if (node.right == null) {
+      node.right = new __map_node{key = key, value = value};
+      return node.right;
+    } else {
+      return __map_insert_helper(node.right, key, value);
+    }
+  }
+}
+
+func __map_insert(key, value) {
+  if (this.root == null) {
+    this.root = new __map_node{key = key, value = value};
+    this.count = 0;
+    return this.root;
+  }
+  this.count = this.count + 1;
+  return __map_insert_helper(this.root, key, value);
+}
+
+func __map_find_helper(node, key) {
+  if (node == null) {
+    return null;
+  }
+  if (node.key.__data__ == key.__data__) {
+    return node;
+  }
+  if (key.__data__ < node.key.__data__) {
+    return __map_find_helper(node.left, key);
+  } else {
+    return __map_find_helper(node.right, key);
+  }
+}
+
+func __map_find(key) { return __map_find_helper(this.root, key); }
+
+func __map_each_helper(node, action) {
+  if (node == null) {
+    return null;
+  }
+  action(node);
+  __map_each_helper(node.left, action);
+  __map_each_helper(node.right, action);
+}
+
+func __map_each(action) { __map_each_helper(this.root, action); }
+
+func Map() {
+  return new __map{count = 0, insert = __map_insert, find = __map_find,
+                   each = __map_each};
 }

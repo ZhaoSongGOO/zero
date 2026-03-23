@@ -25,11 +25,11 @@ func main() {
 
   print(a);
 
-  print(a.data);
-  print(b.data);
+  print(a.__data__);
+  print(b.__data__);
   swap(a, b);
-  print(a.data);
-  print(b.data);
+  print(a.__data__);
+  print(b.__data__);
 
   a = new Custom{age = a, __str__ = showCustom};
 

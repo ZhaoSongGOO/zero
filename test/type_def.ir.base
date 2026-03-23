@@ -52,14 +52,14 @@ main:
   LOAD [ei]
   FREE 1
   LOAD #1
-  PUSH_S data
+  PUSH_S __data__
   GET
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD #2
-  PUSH_S data
+  PUSH_S __data__
   GET
   CALL print
   FREE 1
@@ -72,14 +72,14 @@ main:
   LOAD [ei]
   FREE 1
   LOAD #1
-  PUSH_S data
+  PUSH_S __data__
   GET
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   LOAD #2
-  PUSH_S data
+  PUSH_S __data__
   GET
   CALL print
   FREE 1

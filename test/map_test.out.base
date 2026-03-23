@@ -1,0 +1,7 @@
+{"root":{"key":1, "value":10, "left":null, "right":null}, "count":0, "insert":[FUNCTION __map_insert], "find":[FUNCTION __map_find], "each":[FUNCTION __map_each]}
+{"root":{"key":1, "value":10, "left":{"key":2, "value":20, "left":null, "right":null}, "right":null}, "count":1, "insert":[FUNCTION __map_insert], "find":[FUNCTION __map_find], "each":[FUNCTION __map_each]}
+{"root":{"key":1, "value":30, "left":{"key":2, "value":20, "left":null, "right":null}, "right":null}, "count":2, "insert":[FUNCTION __map_insert], "find":[FUNCTION __map_find], "each":[FUNCTION __map_each]}
+1
+30
+2
+20
