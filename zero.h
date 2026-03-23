@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -159,6 +160,12 @@ struct str_item *free_str_item(struct str_item *item);
 
 void token_print(struct token, struct scanner *sc);
 
+void zero_cmd(int argc, char *argv[]);
+
+void compile(const char *file_name);
+
+void run();
+
 #ifdef ZERO_IMPLEMENTATION
 
 struct source *read_source(const char *file_path) {
@@ -197,6 +204,65 @@ struct source *read_source(const char *file_path) {
   src->content = file_content;
   src->size = read_bytes;
   return src;
+}
+
+void zero_logo() {
+  printf("* * * * * * * * * * * * * * * * * * * **\n");
+  printf("*   ______  ______   _____     ____    *\n");
+  printf("*  |___  / | _____| |  __ \\   / __ \\   *\n");
+  printf("*     / /  | |__    | |__) | | |  | |  *\n");
+  printf("*    / /   |  __|   |  _  /  | |  | |  *\n");
+  printf("*   / /__  | |____  | | \\ \\  | |__| |  *\n");
+  printf("*  /_____| |______| |_|  \\_\\  \\____/   *\n");
+  printf("*                                      *\n");
+  printf("* * * * * * * * * * * * * * * * * * * **\n\n\n");
+}
+
+void zero_help() {
+  zero_logo();
+  printf("Usage: zero [options] <input_file>\n\n");
+  printf("Options:\n");
+  printf("  -h, --help              Show this help message\n");
+  printf("  -v, --version           Display version information\n");
+  printf("  -i, --input <file>      Specify the input files\n");
+  printf("\nExample:\n");
+  printf("  zero -i main.z\n");
+}
+
+void zero_cmd(int argc, char *argv[]) {
+  static struct option long_options[] = {{"help", no_argument, 0, 'h'},
+                                         {"version", no_argument, 0, 'v'},
+                                         {"input", required_argument, 0, 'i'},
+                                         {0, 0, 0, 0}};
+  int opt;
+  char *input_file = NULL;
+  while ((opt = getopt_long(argc, argv, "hvi:", long_options, NULL)) != -1) {
+    switch (opt) {
+    case 'h':
+      zero_help();
+      return;
+    case 'v':
+      printf("zero compiler version 1.0.0-stable\n");
+      return;
+    case 'i':
+      input_file = optarg;
+      break;
+    case '?':
+      // getopt_long already prints an error message
+      return;
+    default:
+      abort();
+    }
+  }
+
+  if (input_file != NULL) {
+    compile(input_file);
+    run();
+  } else {
+    zero_help();
+    fprintf(stderr, "Error: No input files provided.\n");
+    return;
+  }
 }
 
 char *target_filename(const char *source) {
@@ -3792,6 +3858,12 @@ void zero_compile(const char *file_name) {
 void compile(const char *file_name) {
   zero_parser(file_name);
   zero_compile(file_name);
+}
+
+void run() {
+  VM *v = new_vm();
+  VM_Init(v);
+  VM_Run(v);
 }
 
 #endif

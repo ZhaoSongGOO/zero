@@ -68,7 +68,7 @@ def run_tests():
 
         try:
             result = subprocess.run(
-                [EXECUTABLE, z_path],
+                [EXECUTABLE, "-i", z_path],
                 capture_output=True,
                 text=True,
                 timeout=5
