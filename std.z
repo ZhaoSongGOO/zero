@@ -90,6 +90,8 @@ each:
   object;
 get:
   object;
+erase:
+  object;
 };
 
 func __list_push(v) {
@@ -138,9 +140,46 @@ func __list_get(index) {
   return null;
 }
 
+func __list_erase(index){
+  if (index >= this.count) {
+    return null;
+  }
+
+  if (index < 0) {
+    return null;
+  }
+  if(index == 0){
+    this.root = null;
+    this.tail = null;
+    this.count = 0;
+    return null;
+  }
+  
+  var i = this.root;
+  var k = null;
+  var j = 0;
+  while (i != null) {
+    if (j == index) {
+      if(i.next == null){
+        this.tail = k;
+        this.tail.next = null;
+      }else{
+        k.next = i.next;
+      }
+      this.count = this.count - 1;
+      return null;
+    }
+    j = j + 1;
+    k = i;
+    i = i.next;
+  }
+  return null;
+}
+
 func List() {
   return new __list{push = __list_push, count = 0, each = __list_each,
-                    get = __list_get};
+                    get = __list_get,
+                    erase = __list_erase};
 }
 
 typedef __map_node {
@@ -255,15 +294,12 @@ func __stack_pop() {
 
   if (this.count == 1) {
     var x = this.data.get(0);
+    this.data.erase(0);
     this.count = 0;
-    this.data.root = null;
-    this.data.tail = null;
     return x;
   }
   var x = this.data.get(this.count - 1);
-  this.data.tail = this.data.get(this.count - 2);
-  this.data.tail.next = null;
-  this.data.count = this.data.count - 1;
+  this.data.erase(this.count - 1);
   this.count = this.data.count;
   return x;
 }
