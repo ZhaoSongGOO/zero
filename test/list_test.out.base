@@ -20,10 +20,10 @@
 5
 6
 null
-1
-2
-3
-4
-5
-6
+{"__data__":1, "next":{"__data__":2, "next":{"__data__":3, "next":{"__data__":4, "next":{"__data__":5, "next":{"__data__":6, "next":null}}}}}}
+{"__data__":2, "next":{"__data__":3, "next":{"__data__":4, "next":{"__data__":5, "next":{"__data__":6, "next":null}}}}}
+{"__data__":3, "next":{"__data__":4, "next":{"__data__":5, "next":{"__data__":6, "next":null}}}}
+{"__data__":4, "next":{"__data__":5, "next":{"__data__":6, "next":null}}}
+{"__data__":5, "next":{"__data__":6, "next":null}}
+{"__data__":6, "next":null}
 null

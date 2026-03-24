@@ -1,0 +1,156 @@
+__init__:
+main:
+  CALL Stack
+  FREE 0
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 1
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 2
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 3
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 4
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 3
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 2
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S push
+  GET
+  PUSH_D 1
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S count
+  GET
+  PUSH_D 0
+  NE
+  JF 20
+  LOAD #1
+  COPY
+  PUSH_S pop
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  STORE #2
+  LOAD #2
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  FREE 1
+  JUMP -25

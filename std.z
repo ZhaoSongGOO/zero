@@ -102,6 +102,7 @@ func __list_push(v) {
     this.tail = l;
   }
   this.count = this.count + 1;
+  return l;
 }
 
 func __list_each(action) {
@@ -129,7 +130,7 @@ func __list_get(index) {
   var j = 0;
   while (i != null) {
     if (j == index) {
-      return i.__data__;
+      return i;
     }
     j = j + 1;
     i = i.next;
@@ -229,4 +230,45 @@ func __map_each(action) { __map_each_helper(this.root, action); }
 func Map() {
   return new __map{count = 0, insert = __map_insert, find = __map_find,
                    each = __map_each};
+}
+
+typedef __stack {
+data:
+  __list;
+count:
+  int;
+push:
+  object;
+pop:
+  object;
+};
+
+func __stack_push(v) {
+  var x = this.data.push(v);
+  this.count = this.data.count;
+}
+
+func __stack_pop() {
+  if (this.count == 0) {
+    return null;
+  }
+
+  if (this.count == 1) {
+    var x = this.data.get(0);
+    this.count = 0;
+    this.data.root = null;
+    this.data.tail = null;
+    return x;
+  }
+  var x = this.data.get(this.count - 1);
+  this.data.tail = this.data.get(this.count - 2);
+  this.data.tail.next = null;
+  this.data.count = this.data.count - 1;
+  this.count = this.data.count;
+  return x;
+}
+
+func Stack() {
+  return new __stack{data = List(), count = 0, push = __stack_push,
+                     pop = __stack_pop};
 }

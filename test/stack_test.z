@@ -1,0 +1,25 @@
+include("std");
+
+func main() {
+  var s = Stack();
+  print(s);
+  s.push(Int(1));
+  print(s);
+  s.push(Int(2));
+  print(s);
+  s.push(Int(3));
+  print(s);
+  s.push(Int(4));
+  print(s);
+  s.push(Int(3));
+  print(s);
+  s.push(Int(2));
+  print(s);
+  s.push(Int(1));
+  print(s);
+  while (s.count != 0) {
+    var x = s.pop();
+    print(x);
+    print(s);
+  }
+}

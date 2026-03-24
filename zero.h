@@ -3111,7 +3111,18 @@ void print_object(VM *vm, ZValue *value) {
     printf("{");
     for (int i = 0; i < obj->count; i++) {
       printf("\"%s\":", obj->entries[i].key);
-      print_data(vm, obj->entries[i].value);
+      ZValue *u = obj->entries[i].value;
+      // if(u->type == VAL_REF){
+      //   ZValue * u_u = (ZValue*)u->data.ptr;
+      //   if(u_u->type == VAL_OBJ_PTR){
+      //     printf("[OBJ #%ld]", (int)u->data.ptr);
+      //   }else{
+      //     print_data(vm, u);
+      //   }
+      // }else{
+      //   print_data(vm, u);
+      // }
+      print_data(vm, u);
       if (i != obj->count - 1) {
         printf(", ");
       }
