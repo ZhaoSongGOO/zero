@@ -140,7 +140,7 @@ func __list_get(index) {
   return null;
 }
 
-func __list_erase(index){
+func __list_erase(index) {
   if (index >= this.count) {
     return null;
   }
@@ -148,22 +148,22 @@ func __list_erase(index){
   if (index < 0) {
     return null;
   }
-  if(index == 0){
+  if (index == 0) {
     this.root = null;
     this.tail = null;
     this.count = 0;
     return null;
   }
-  
+
   var i = this.root;
   var k = null;
   var j = 0;
   while (i != null) {
     if (j == index) {
-      if(i.next == null){
+      if (i.next == null) {
         this.tail = k;
         this.tail.next = null;
-      }else{
+      } else {
         k.next = i.next;
       }
       this.count = this.count - 1;
@@ -178,8 +178,7 @@ func __list_erase(index){
 
 func List() {
   return new __list{push = __list_push, count = 0, each = __list_each,
-                    get = __list_get,
-                    erase = __list_erase};
+                    get = __list_get, erase = __list_erase};
 }
 
 typedef __map_node {
