@@ -1,0 +1,18 @@
+include("std");
+
+func main() {
+  var q = Queue();
+  print(q);
+  q.push(Int(1));
+  print(q);
+  q.push(Int(2));
+  print(q);
+  q.push(Int(3));
+  print(q);
+
+  while (q.count != 0) {
+    var x = q.pop();
+    print(x);
+    print(q);
+  }
+}
