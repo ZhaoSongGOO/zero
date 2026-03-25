@@ -1,0 +1,11 @@
+func action(title, count){
+    while (count > 0) {
+        print(title);
+        count = count - 1; 
+    }
+}
+func main() {
+    // 1. 定义包含函数的对象
+    var a = action;
+    a("xixi", 12);
+}

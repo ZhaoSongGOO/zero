@@ -1,0 +1,28 @@
+__init__:
+action:
+  LOAD #-1
+  PUSH_D 0
+  G
+  JF 12
+  LOAD #-0
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #-1
+  LOAD #-1
+  PUSH_D 1
+  MINUS
+  ASSIGN
+  STORE #-1
+  JUMP -15
+main:
+  LOAD .action
+  STORE #1
+  LOAD #1
+  PUSH_D 12
+  PUSH_S "xixi"
+  CALL -2
+  FREE 3
+  LOAD [ei]
+  FREE 1

@@ -857,8 +857,10 @@ struct syntax_expr {
     } binary_expr;
 
     struct {
+      int var_index;
       bool is_from_params;
       int offset;
+
       bool source_in_stack;
       char *func_name;
       struct syntax_expr *source;
@@ -1801,6 +1803,12 @@ struct syntax_expr *parser_call(struct syntax_expr *caller,
     call->data.call_expr.is_from_params =
         caller->data.identifier_expr.from_params;
     call->data.call_expr.offset = caller->data.identifier_expr.offset;
+    if (!caller->data.identifier_expr.is_from_top) {
+      call->data.call_expr.var_index = caller->data.identifier_expr.var_index;
+    } else {
+      call->data.call_expr.var_index = -1;
+    }
+
   } else if (caller->type == EXPR_ACCESS) {
     call->data.call_expr.source_in_stack = true;
     call->data.call_expr.source = caller;
@@ -2407,6 +2415,10 @@ void expression_call_visitor(struct syntax_expr *expr) {
   if (expr->data.call_expr.is_from_params) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d",
                      expr->data.call_expr.offset);
+  } else if (expr->data.call_expr.var_index != -1 &&
+             !expr->data.call_expr.source_in_stack) {
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d",
+                     expr->data.call_expr.var_index + 1);
   }
   for (int i = expr->data.call_expr.args->count - 1; i >= 0; i--) {
     expression_visitor(
@@ -2415,7 +2427,8 @@ void expression_call_visitor(struct syntax_expr *expr) {
   if (expr->data.call_expr.source_in_stack) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
                      expr->data.call_expr.args->count);
-  } else if (expr->data.call_expr.is_from_params) {
+  } else if (expr->data.call_expr.is_from_params ||
+             expr->data.call_expr.var_index != -1) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL -%d",
                      expr->data.call_expr.args->count);
   } else {
@@ -2425,7 +2438,8 @@ void expression_call_visitor(struct syntax_expr *expr) {
   if (expr->data.call_expr.source_in_stack) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                      expr->data.call_expr.args->count + 2); // function and this
-  } else if (expr->data.call_expr.is_from_params) {
+  } else if (expr->data.call_expr.is_from_params ||
+             expr->data.call_expr.var_index != -1) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                      expr->data.call_expr.args->count + 1); // function
   } else {
