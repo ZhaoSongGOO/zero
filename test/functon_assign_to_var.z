@@ -4,8 +4,14 @@ func action(title, count){
         count = count - 1; 
     }
 }
+
+func action_second(){
+    print("second");
+}
 func main() {
     // 1. 定义包含函数的对象
     var a = action;
     a("xixi", 12);
+    a = action_second;
+    a();
 }
