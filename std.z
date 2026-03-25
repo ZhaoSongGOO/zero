@@ -149,16 +149,16 @@ func __list_erase(index) {
     return null;
   }
   if (index == 0) {
+    var n = this.root;
     if (this.count == 1) {
       this.root = null;
       this.tail = null;
       this.count = 0;
-      return null;
     } else {
       this.root = this.root.next;
       this.count = this.count - 1;
-      return null;
     }
+    return n;
   }
 
   var i = this.root;
@@ -173,13 +173,12 @@ func __list_erase(index) {
         k.next = i.next;
       }
       this.count = this.count - 1;
-      return null;
+      return i;
     }
     j = j + 1;
     k = i;
     i = i.next;
   }
-  return null;
 }
 
 func List() {
@@ -298,13 +297,11 @@ func __stack_pop() {
   }
 
   if (this.count == 1) {
-    var x = this.data.get(0);
-    this.data.erase(0);
+    var x = this.data.erase(0);
     this.count = 0;
     return x;
   }
-  var x = this.data.get(this.count - 1);
-  this.data.erase(this.count - 1);
+  var x = this.data.erase(this.count - 1);
   this.count = this.data.count;
   return x;
 }
@@ -334,8 +331,7 @@ func __queue_pop() {
   if (this.count <= 0) {
     return null;
   }
-  var x = this.data.get(0);
-  this.data.erase(0);
+  var x = this.data.erase(0);
   this.count = this.data.count;
   return x;
 }
