@@ -21,6 +21,6 @@ func main(){
 
 - [TODO](./TODO.md)
 
-- [Introduction](./introduction.md)
+- [Introduction Chinese](./introduction-zh-cn.md)
 
 - [ASM](./asm.md)
