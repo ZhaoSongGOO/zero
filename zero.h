@@ -3242,17 +3242,17 @@ ZValue *new_null() {
 }
 
 void zero_open(VM *vm) {
-  ZValue *v = vm->stacks[vm->sp--];
+  ZValue *v = vm->stacks[vm->sp];
   assert(v->type == VAL_STR_INDEX);
   const char *file_name = vm->cvalues->get(vm->cvalues, v->data.i_val);
   assert(file_name != NULL);
   if (file_name == NULL || strlen(file_name) == 0) {
-    vm->stacks[++vm->sp] = new_null();
+    map_insert(vm->registers, "ei", new_null());
     return;
   }
   int fd = open(file_name, O_RDONLY | O_CLOEXEC);
   if (fd == -1) {
-    vm->stacks[++vm->sp] = new_null();
+    map_insert(vm->registers, "ei", new_null());
     return;
   }
   ZValue *f_ref = (ZValue *)malloc(sizeof(ZValue));
