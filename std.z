@@ -343,7 +343,7 @@ func Queue() {
 
 typedef File {
 fd:
-  Int;
+  int;
 };
 
 func open(p) {
@@ -351,12 +351,7 @@ func open(p) {
   return new File{fd = f};
 }
 
-// TODO(To be implemented)
-func read(file){
-  return __read(file);
-}
+func read(file) { return __read(file); }
 
 // TODO(To be implemented)
-func close(file){
-  __close(file);
-}
+func close(file) { __close(file); }

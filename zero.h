@@ -3190,6 +3190,8 @@ void print_ref(VM *vm, ZValue *v) {
   case VAL_OBJ_PTR:
     print_object(vm, v);
     break;
+  case VAL_STR:
+    printf("%s\n", d->data.ptr);
   default:
     print_data(vm, d);
     break;
@@ -3267,17 +3269,63 @@ void zero_open(VM *vm) {
     map_insert(vm->registers, "ei", new_null());
     return;
   }
-  ZValue *f_ref = (ZValue *)malloc(sizeof(ZValue));
-  f_ref->type = VAL_REF;
   ZValue *f = (ZValue *)malloc(sizeof(ZValue));
   f->type = VAL_INT;
   f->data.i_val = fd;
-  f_ref->data.ptr = f;
-  map_insert(vm->registers, "ei", f_ref);
+  map_insert(vm->registers, "ei", f);
 }
 
-// TODO(To be implemented)
-void zero_read(VM *vm) {}
+void zero_read(VM *vm) {
+  ZValue *v = vm->stacks[vm->sp];
+  if (v->type == VAL_NULL) {
+    map_insert(vm->registers, "ei", new_string());
+    return;
+  }
+  assert(v->type == VAL_REF);
+  ZValue *obj_ref = (ZValue *)v->data.ptr;
+  assert(obj_ref->type == VAL_OBJ_PTR);
+  ZObject *obj = (ZObject *)obj_ref->data.ptr;
+  ZValue *fdv = NULL;
+  for (int i = 0; i < obj->count; i++) {
+    if (strcmp("fd", obj->entries[i].key) == 0) {
+      fdv = obj->entries[i].value;
+      break;
+    }
+  }
+  if (fdv == NULL) {
+    map_insert(vm->registers, "ei", new_string());
+    return;
+  }
+  assert(fdv->type == VAL_INT);
+  int fd = fdv->data.i_val;
+  off_t file_size = lseek(fd, 0, SEEK_END);
+  if (file_size == -1) {
+    map_insert(vm->registers, "ei", new_string());
+    return;
+  }
+  lseek(fd, 0, SEEK_SET);
+  char *file_content = (char *)malloc(file_size + 1);
+  if (file_content == NULL) {
+    map_insert(vm->registers, "ei", new_string());
+    return;
+  }
+  ssize_t read_bytes = read(fd, file_content, file_size);
+  if (read_bytes == -1) {
+    free(file_content);
+    map_insert(vm->registers, "ei", new_string());
+    return;
+  }
+  file_content[read_bytes] = '\0';
+
+  ZValue *sf = (ZValue *)malloc(sizeof(ZValue));
+  sf->type = VAL_REF;
+
+  ZValue *s = new_string();
+  s->data.ptr = file_content;
+
+  sf->data.ptr = s;
+  map_insert(vm->registers, "ei", sf);
+}
 
 // TODO(To be implemented)
 void zero_close(VM *vm) {}

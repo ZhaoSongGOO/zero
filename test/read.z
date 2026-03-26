@@ -1,0 +1,8 @@
+include("std");
+
+func main(){
+    var f = open("test/read_test.txt");
+    print(f);
+    var x = read(f);
+    print(x);
+}
