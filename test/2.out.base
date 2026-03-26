@@ -1,5 +1,5 @@
 7
-"Hello World"
+Hello World
 [1.300000, 2, 3, 7]
 false
 true
@@ -8,7 +8,7 @@ true
 false
 true
 false
-"hi"
+hi
 2
 7
 2
@@ -18,9 +18,9 @@ false
 99
 99
 1
-"abc"
+abc
 12
-{"key":1, "address":"abc"}
+{"key":1, "address":abc}
 99
 101
 100
@@ -29,18 +29,18 @@ false
 100
 null
 5
-"Iam running"
-"Iam running"
-"Iam running"
-"Iam running"
-"Iam running"
+Iam running
+Iam running
+Iam running
+Iam running
+Iam running
 1
-"return null"
+return null
 true
 true
 {"owner":{"run":[FUNCTION action]}}
 [FUNCTION action]
 [FUNCTION action]
-"owner running"
-"owner running"
-"owner running"
+owner running
+owner running
+owner running

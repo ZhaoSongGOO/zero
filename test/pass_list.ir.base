@@ -9,7 +9,7 @@ main:
   PUSH_D 1
   PUSH_D 2
   PUSH_D 3
-  PUSH_S "Hello"
+  PUSH_S Hello
   PUSH_D 4
   CALL NEW_ARRAY
   STORE #1

@@ -9,7 +9,7 @@ test:
   LOAD [ei]
   FREE 1
 action:
-  PUSH_S "Running!"
+  PUSH_S Running!
   CALL print
   FREE 1
   LOAD [ei]

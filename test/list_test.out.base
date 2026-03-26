@@ -12,7 +12,7 @@
 5
 {"root":{"__data__":1, "next":{"__data__":2, "next":{"__data__":3, "next":{"__data__":4, "next":{"__data__":5, "next":{"__data__":6, "next":null}}}}}}, "count":6, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "erase":[FUNCTION __list_erase], "tail":{"__data__":6, "next":null}}
 6
-"------------"
+------------
 1
 2
 3

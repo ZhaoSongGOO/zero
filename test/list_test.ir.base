@@ -166,7 +166,7 @@ main:
   FREE 1
   LOAD [ei]
   FREE 1
-  PUSH_S "------------"
+  PUSH_S ------------
   CALL print
   FREE 1
   LOAD [ei]

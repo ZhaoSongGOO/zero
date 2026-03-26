@@ -67,7 +67,7 @@ main:
   CALL NEW_OBJECT
   STORE #1
   PUSH_S name
-  PUSH_S "Zero Fibonacci Tool"
+  PUSH_S Zero Fibonacci Tool
   PUSH_S engine
   LOAD #1
   PUSH_D 2
@@ -91,7 +91,7 @@ main:
   FREE 3
   LOAD [ei]
   STORE #3
-  PUSH_S "Result for 10th Fib:"
+  PUSH_S Result for 10th Fib:
   CALL print
   FREE 1
   LOAD [ei]
@@ -101,7 +101,7 @@ main:
   FREE 1
   LOAD [ei]
   FREE 1
-  PUSH_S "Running batch 1 to 5:"
+  PUSH_S Running batch 1 to 5:
   CALL print
   FREE 1
   LOAD [ei]

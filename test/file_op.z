@@ -1,0 +1,7 @@
+include("std");
+
+func main(){
+    var f = open("main.c");
+    print(f);
+    print(f.fd);
+}

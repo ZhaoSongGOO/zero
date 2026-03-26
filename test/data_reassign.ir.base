@@ -7,7 +7,7 @@ assigna:
 assignb:
   LOAD #-0
   PUSH_S name
-  PUSH_S "mike"
+  PUSH_S mike
   SET
 main:
   PUSH_D 1
@@ -29,7 +29,7 @@ main:
   FREE 1
   LOAD #1
   PUSH_S name
-  PUSH_S "lily"
+  PUSH_S lily
   PUSH_D 1
   CALL NEW_OBJECT
   ASSIGN

@@ -17,7 +17,7 @@ action:
   STORE #-1
   JUMP -15
 action_second:
-  PUSH_S "second"
+  PUSH_S second
   CALL print
   FREE 1
   LOAD [ei]
@@ -27,7 +27,7 @@ main:
   STORE #1
   LOAD #1
   PUSH_D 12
-  PUSH_S "xixi"
+  PUSH_S xixi
   CALL -2
   FREE 3
   LOAD [ei]

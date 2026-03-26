@@ -2296,7 +2296,7 @@ void expression_literal_visitor(struct syntax_expr *expr) {
                      expr->data.literal_expr.float_val);
     break;
   case LIT_STR:
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S \"%s\"",
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s",
                      expr->data.literal_expr.str_val);
     break;
   case LIT_BOOL:
@@ -2675,15 +2675,15 @@ void init_actions() {
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_REF;
-  ZValue *b_print = (ZValue *)malloc(sizeof(ZValue));
-  b_print->type = VAL_FUNC;
   ZFunction *func = new_function();
   func->is_builtin = true;
   func->name = name;
-  b_print->data.ptr = func;
-  v->data.ptr = b_print;
+  ZValue *f = (ZValue *)malloc(sizeof(ZValue));
+  f->type = VAL_FUNC;
+  f->data.ptr = func;
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_REF;
+  v->data.ptr = f;
   return v;
 }
 
@@ -2694,6 +2694,8 @@ void init_builtin(VM *vm) {
   map_insert(vm->symbols, "NEW_OBJECT",
              get_builtin_function_value(vm, "NEW_OBJECT"));
   map_insert(vm->symbols, "__print", get_builtin_function_value(vm, "__print"));
+
+  map_insert(vm->symbols, "__open", get_builtin_function_value(vm, "__open"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3233,6 +3235,35 @@ void new_object(VM *vm) {
   vm->stacks[vm->sp] = i;
 }
 
+ZValue *new_null() {
+  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
+  n->type = VAL_NULL;
+  return n;
+}
+
+void zero_open(VM *vm) {
+  ZValue *v = vm->stacks[vm->sp--];
+  assert(v->type == VAL_STR_INDEX);
+  const char *file_name = vm->cvalues->get(vm->cvalues, v->data.i_val);
+  assert(file_name != NULL);
+  if (file_name == NULL || strlen(file_name) == 0) {
+    vm->stacks[++vm->sp] = new_null();
+    return;
+  }
+  int fd = open(file_name, O_RDONLY | O_CLOEXEC);
+  if (fd == -1) {
+    vm->stacks[++vm->sp] = new_null();
+    return;
+  }
+  ZValue *f_ref = (ZValue *)malloc(sizeof(ZValue));
+  f_ref->type = VAL_REF;
+  ZValue *f = (ZValue *)malloc(sizeof(ZValue));
+  f->type = VAL_INT;
+  f->data.i_val = fd;
+  f_ref->data.ptr = f;
+  map_insert(vm->registers, "ei", f_ref);
+}
+
 void call_builtin_function(VM *vm, ZFunction *func) {
   assert(func->is_builtin);
   if (strcmp(func->name, "print") == 0) {
@@ -3243,6 +3274,8 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     new_object(vm);
   } else if (strcmp(func->name, "__print") == 0) {
     __print(vm);
+  } else if (strcmp(func->name, "__open") == 0) {
+    zero_open(vm);
   } else {
     assert(false);
   }
@@ -3835,11 +3868,11 @@ INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_COPY, NULL);
 }
 
-INSTRUCTION *NEW_AND_INSTRUCTION(VM *vm, const char *value){
+INSTRUCTION *NEW_AND_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_AND, NULL);
 }
-INSTRUCTION *NEW_OR_INSTRUCTION(VM *vm, const char *value){
-return new_inst(I_OR, NULL);
+INSTRUCTION *NEW_OR_INSTRUCTION(VM *vm, const char *value) {
+  return new_inst(I_OR, NULL);
 }
 
 const char *append_suffix(const char *m) {

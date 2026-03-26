@@ -1,6 +1,6 @@
 __init__:
 showCustom:
-  PUSH_S "Custom age is "
+  PUSH_S Custom age is 
   CALL __print
   FREE 1
   LOAD [ei]
@@ -18,7 +18,7 @@ showCustom:
   PUSH_N
   NE
   JF 17
-  PUSH_S "---call next start---"
+  PUSH_S ---call next start---
   CALL print
   FREE 1
   LOAD [ei]
@@ -30,7 +30,7 @@ showCustom:
   FREE 1
   LOAD [ei]
   FREE 1
-  PUSH_S "---call next end---"
+  PUSH_S ---call next end---
   CALL print
   FREE 1
   LOAD [ei]

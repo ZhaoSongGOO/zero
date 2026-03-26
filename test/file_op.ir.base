@@ -1,0 +1,19 @@
+__init__:
+main:
+  PUSH_S main.c
+  CALL open
+  FREE 1
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_S fd
+  GET
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1

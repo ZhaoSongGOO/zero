@@ -70,7 +70,7 @@ main:
   FREE 1
   LOAD #1
   PUSH_S name
-  PUSH_S "mike"
+  PUSH_S mike
   PUSH_D 1
   CALL NEW_OBJECT
   ASSIGN

@@ -4,7 +4,7 @@ __init__:
   PUSH_D 99
   STORE 1
 sayHi:
-  PUSH_S "hi"
+  PUSH_S hi
   CALL print
   FREE 1
   LOAD [ei]
@@ -63,7 +63,7 @@ main:
   FREE 1
   LOAD [ei]
   FREE 1
-  PUSH_S "Hello World"
+  PUSH_S Hello World
   CALL print
   FREE 1
   LOAD [ei]
@@ -216,7 +216,7 @@ main:
   PUSH_S key
   PUSH_D 1
   PUSH_S address
-  PUSH_S "abc"
+  PUSH_S abc
   PUSH_D 2
   CALL NEW_OBJECT
   STORE #11
@@ -301,7 +301,7 @@ main:
   PUSH_S run
   GET
   PUSH_D 5
-  PUSH_S "Iam running"
+  PUSH_S Iam running
   CALL -2
   FREE 4
   LOAD [ei]
@@ -311,13 +311,13 @@ main:
   FREE 1
   LOAD [ei]
   JF 6
-  PUSH_S "return not null"
+  PUSH_S return not null
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
   JUMP 5
-  PUSH_S "return null"
+  PUSH_S return null
   CALL print
   FREE 1
   LOAD [ei]
@@ -373,7 +373,7 @@ main:
   PUSH_S run
   GET
   PUSH_D 3
-  PUSH_S "owner running"
+  PUSH_S owner running
   CALL -2
   FREE 4
   LOAD [ei]

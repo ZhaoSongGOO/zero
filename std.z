@@ -340,3 +340,13 @@ func Queue() {
   return new __queue{data = List(), count = 0, push = __queue_push,
                      pop = __queue_pop};
 }
+
+typedef File {
+fd:
+  Int;
+};
+
+func open(p) {
+  var f = __open(p);
+  return new File{fd = f};
+}

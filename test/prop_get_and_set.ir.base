@@ -1,12 +1,12 @@
 __init__:
 af:
-  PUSH_S "a1"
+  PUSH_S a1
   CALL print
   FREE 1
   LOAD [ei]
   FREE 1
 as:
-  PUSH_S "a2"
+  PUSH_S a2
   CALL print
   FREE 1
   LOAD [ei]
@@ -111,7 +111,7 @@ main:
   PUSH_S action
   GET
   PUSH_D 3
-  PUSH_S "haha"
+  PUSH_S haha
   CALL -2
   FREE 4
   LOAD [ei]
@@ -121,7 +121,7 @@ main:
   PUSH_S action
   GET
   PUSH_D 3
-  PUSH_S "oooo"
+  PUSH_S oooo
   CALL -2
   FREE 4
   LOAD [ei]
