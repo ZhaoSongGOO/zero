@@ -2371,10 +2371,13 @@ void expression_binary_visitor(struct syntax_expr *expr) {
         }
       }
     }
-
-  }
-
-  break;
+  } break;
+  case TOKEN_AND:
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "AND");
+    break;
+  case TOKEN_OR:
+    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "OR");
+    break;
   default:
     assert(false);
   }
@@ -2524,6 +2527,8 @@ typedef enum {
   I_LE,
   I_E,
   I_NE,
+  I_AND,
+  I_OR,
   I_NOT,
   I_NEGATE,
   I_ASSIGN,
@@ -2633,6 +2638,8 @@ INSTRUCTION *NEW_GET_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value);
 INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_AND_INSTRUCTION(VM *vm, const char *value);
+INSTRUCTION *NEW_OR_INSTRUCTION(VM *vm, const char *value);
 void init_actions() {
   actions = (Map *)malloc(sizeof(Map));
   map_insert(actions, "STORE", NEW_STORE_INSTRUCTION);
@@ -2663,6 +2670,8 @@ void init_actions() {
   map_insert(actions, "SET", NEW_SET_INSTRUCTION);
   map_insert(actions, "CHECK", NEW_CHECK_INSTRUCTION);
   map_insert(actions, "COPY", NEW_COPY_INSTRUCTION);
+  map_insert(actions, "AND", NEW_AND_INSTRUCTION);
+  map_insert(actions, "OR", NEW_OR_INSTRUCTION);
 }
 
 ZValue *get_builtin_function_value(VM *vm, const char *name) {
@@ -2975,7 +2984,7 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
   ZValue *result = (ZValue *)malloc(sizeof(ZValue));
   result->type = VAL_BOOL;
   bool v = false;
-  if (code >= I_G && code <= I_NE) {
+  if (code >= I_G && code <= I_OR) {
     float left = get_number_value_from_zvalue(vm, vm->stacks[vm->sp - 1]);
     float right = get_number_value_from_zvalue(vm, vm->stacks[vm->sp]);
     switch (code) {
@@ -2996,6 +3005,12 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
       break;
     case I_NE:
       v = left != right;
+      break;
+    case I_AND:
+      v = left && right;
+      break;
+    case I_OR:
+      v = left || right;
       break;
     default:
       assert(false);
@@ -3480,6 +3495,8 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     case I_NOT:
     case I_E:
     case I_NE:
+    case I_AND:
+    case I_OR:
       LOGIC_INST_RUN(vm, inst->v, inst->code);
       break;
     case I_ASSIGN:
@@ -3569,6 +3586,8 @@ void __INIT__RUN(VM *vm, ZValue *value) {
     case I_JF:
     case I_CHECK:
     case I_COPY:
+    case I_AND:
+    case I_OR:
     default:
       assert(false);
     }
@@ -3623,10 +3642,6 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
     zv->data.i_val = offset;
     return new_inst(I_STORE, zv);
   }
-}
-
-void lllllllllll(MapPair *pair, void *data) {
-  printf("lllll: %s\n", pair->key);
 }
 
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
@@ -3818,6 +3833,13 @@ INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value) {
 }
 INSTRUCTION *NEW_COPY_INSTRUCTION(VM *vm, const char *value) {
   return new_inst(I_COPY, NULL);
+}
+
+INSTRUCTION *NEW_AND_INSTRUCTION(VM *vm, const char *value){
+  return new_inst(I_AND, NULL);
+}
+INSTRUCTION *NEW_OR_INSTRUCTION(VM *vm, const char *value){
+return new_inst(I_OR, NULL);
 }
 
 const char *append_suffix(const char *m) {

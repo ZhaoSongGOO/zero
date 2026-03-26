@@ -1,0 +1,125 @@
+__init__:
+main:
+  PUSH_D 1
+  STORE #1
+  PUSH_D 2
+  STORE #2
+  LOAD #1
+  PUSH_D 1
+  E
+  LOAD #2
+  PUSH_D 2
+  E
+  OR
+  JF 5
+  PUSH_S "a==1 or b == 2"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_D 1
+  E
+  LOAD #2
+  PUSH_D 3
+  E
+  OR
+  JF 5
+  PUSH_S "a==1 or b == 3"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_D 2
+  E
+  LOAD #2
+  PUSH_D 3
+  E
+  OR
+  JF 5
+  PUSH_S "a==2 or b == 3"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_D 2
+  GE
+  LOAD #2
+  PUSH_D 2
+  E
+  OR
+  JF 5
+  PUSH_S "a>=2 or b == 3"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_D 1
+  E
+  LOAD #2
+  PUSH_D 2
+  E
+  AND
+  JF 6
+  PUSH_S "a==1 and b==2"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  JUMP 5
+  PUSH_S "not a==1 and b==2"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_D 1
+  E
+  LOAD #2
+  PUSH_D 3
+  E
+  AND
+  JF 6
+  PUSH_S "a==1 and b==3"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  JUMP 5
+  PUSH_S "not a==1 and b==3"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  PUSH_D 1
+  E
+  LOAD #2
+  PUSH_D 3
+  E
+  AND
+  JF 6
+  PUSH_S "[1]:a == 1 && b == 2"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  JUMP 15
+  LOAD #2
+  PUSH_D 3
+  E
+  JF 6
+  PUSH_S "[2]:b == 3"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  JUMP 5
+  PUSH_S "[3]:end!"
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
