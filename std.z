@@ -350,3 +350,13 @@ func open(p) {
   var f = __open(p);
   return new File{fd = f};
 }
+
+// TODO(To be implemented)
+func read(file){
+  return __read(file);
+}
+
+// TODO(To be implemented)
+func close(file){
+  __close(file);
+}

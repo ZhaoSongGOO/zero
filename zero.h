@@ -2482,6 +2482,7 @@ typedef enum {
   VAL_BOOL,
   VAL_FUNC,
   VAL_REF,
+  VAL_STR,
   VAL_OFFSET,
   VAL_REGISTER,
   VAL_NULL,
@@ -2496,6 +2497,19 @@ typedef struct {
     void *ptr;
   } data;
 } ZValue;
+
+ZValue *new_null() {
+  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
+  n->type = VAL_NULL;
+  return n;
+}
+
+ZValue *new_string() {
+  ZValue *s = (ZValue *)malloc(sizeof(ZValue));
+  s->type = VAL_STR;
+  s->data.ptr = NULL;
+  return s;
+}
 
 typedef struct {
   int length;
@@ -2696,6 +2710,10 @@ void init_builtin(VM *vm) {
   map_insert(vm->symbols, "__print", get_builtin_function_value(vm, "__print"));
 
   map_insert(vm->symbols, "__open", get_builtin_function_value(vm, "__open"));
+
+  map_insert(vm->symbols, "__read", get_builtin_function_value(vm, "__read"));
+
+  map_insert(vm->symbols, "__close", get_builtin_function_value(vm, "__close"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3235,12 +3253,6 @@ void new_object(VM *vm) {
   vm->stacks[vm->sp] = i;
 }
 
-ZValue *new_null() {
-  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
-  n->type = VAL_NULL;
-  return n;
-}
-
 void zero_open(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   assert(v->type == VAL_STR_INDEX);
@@ -3264,6 +3276,12 @@ void zero_open(VM *vm) {
   map_insert(vm->registers, "ei", f_ref);
 }
 
+// TODO(To be implemented)
+void zero_read(VM *vm) {}
+
+// TODO(To be implemented)
+void zero_close(VM *vm) {}
+
 void call_builtin_function(VM *vm, ZFunction *func) {
   assert(func->is_builtin);
   if (strcmp(func->name, "print") == 0) {
@@ -3276,6 +3294,10 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     __print(vm);
   } else if (strcmp(func->name, "__open") == 0) {
     zero_open(vm);
+  } else if (strcmp(func->name, "__read") == 0) {
+    zero_read(vm);
+  } else if (strcmp(func->name, "__close") == 0) {
+    zero_close(vm);
   } else {
     assert(false);
   }
