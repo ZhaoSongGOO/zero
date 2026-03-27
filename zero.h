@@ -2253,6 +2253,9 @@ void expression_new_visitor(struct syntax_expr *expr) {
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d",
                    expr->data.new_expr.mete_data->segments->count);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
+                   expr->data.new_expr.mete_data->segments->count * 2 + 1);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
 
 void expression_access_visitor(struct syntax_expr *expr) {
@@ -2453,12 +2456,21 @@ void expression_call_visitor(struct syntax_expr *expr) {
 
 void expression_array_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_ARRAY);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S __data__");
   struct Vec *elements = expr->data.array_expr.elements;
   for (int i = 0; i < elements->count; i++) {
     expression_visitor(elements->get(elements, i));
   }
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", elements->count);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_ARRAY");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d", elements->count + 1);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S count");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", elements->count);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D 2");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d", 2 * 2 + 1);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
 void expression_object_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_OBJECT);
@@ -2470,6 +2482,8 @@ void expression_object_visitor(struct syntax_expr *expr) {
   }
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", pairs->count);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d", pairs->count * 2 + 1);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
 
 typedef enum {
@@ -3207,8 +3221,14 @@ void print(VM *vm) {
   printf("\n");
 }
 
+/*
+1:v1
+2:v2
+3:2  <---- sp
+*/
+
 void new_array(VM *vm) {
-  ZValue *count = vm->stacks[vm->sp--];
+  ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
   ZValue *data = (ZValue *)malloc(sizeof(ZValue));
   data->type = VAL_ARR;
@@ -3216,20 +3236,26 @@ void new_array(VM *vm) {
   arr->length = count->data.i_val;
   arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
   for (int i = 0; i < arr->length; i++) {
-    ZValue *src = vm->stacks[vm->sp - arr->length + 1 + i];
-    // arr->elements[i] = (ZValue *)malloc(sizeof(ZValue));
+    ZValue *src = vm->stacks[vm->sp - arr->length + i];
     arr->elements[i] = copy(src);
   }
   data->data.ptr = arr;
-  vm->sp -= arr->length - 1;
   ZValue *i = (ZValue *)malloc(sizeof(ZValue));
   i->type = VAL_REF;
   i->data.ptr = data;
-  vm->stacks[vm->sp] = i;
+  map_insert(vm->registers, "ei", i);
 }
 
+/*
+1:k1
+2:v1
+3:k2
+4:v2
+5:2  <---- sp
+*/
+
 void new_object(VM *vm) {
-  ZValue *count = vm->stacks[vm->sp--];
+  ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
   ZValue *data = (ZValue *)malloc(sizeof(ZValue));
   data->type = VAL_OBJ;
@@ -3238,20 +3264,17 @@ void new_object(VM *vm) {
   arr->entries = (ZPair *)malloc(sizeof(ZPair) * arr->count);
   for (int i = 0; i < arr->count; i++) {
     int stack_base = vm->sp - arr->count * 2;
-    ZValue *key = vm->stacks[stack_base + i * 2 + 1];
+    ZValue *key = vm->stacks[stack_base + i * 2];
     assert(key->type == VAL_STR_INDEX);
-    ZValue *value = vm->stacks[stack_base + i * 2 + 2];
+    ZValue *value = vm->stacks[stack_base + i * 2 + 1];
     arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
     arr->entries[i].value = copy(value);
-    // arr->entries[i].value->data = value->data;
-    // arr->entries[i].value->type = value->type;
   }
   data->data.ptr = arr;
-  vm->sp -= arr->count * 2 - 1;
   ZValue *i = (ZValue *)malloc(sizeof(ZValue));
   i->type = VAL_REF;
   i->data.ptr = data;
-  vm->stacks[vm->sp] = i;
+  map_insert(vm->registers, "ei", i);
 }
 
 void zero_open(VM *vm) {

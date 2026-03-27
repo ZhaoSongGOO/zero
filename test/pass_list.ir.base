@@ -6,12 +6,21 @@ test:
   LOAD [ei]
   FREE 1
 main:
+  PUSH_S __data__
   PUSH_D 1
   PUSH_D 2
   PUSH_D 3
   PUSH_S Hello
   PUSH_D 4
   CALL NEW_ARRAY
+  FREE 5
+  LOAD [ei]
+  PUSH_S count
+  PUSH_D 4
+  PUSH_D 2
+  CALL NEW_OBJECT
+  FREE 5
+  LOAD [ei]
   STORE #1
   LOAD #1
   CALL test

@@ -28,6 +28,8 @@ new_number:
   CHECK 5
   PUSH_D 3
   CALL NEW_OBJECT
+  FREE 7
+  LOAD [ei]
   STORE [ei]
 main:
   PUSH_D 1

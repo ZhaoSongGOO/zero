@@ -19,6 +19,8 @@ main:
   LOAD .action
   PUSH_D 1
   CALL NEW_OBJECT
+  FREE 3
+  LOAD [ei]
   STORE #1
   LOAD #1
   CALL test

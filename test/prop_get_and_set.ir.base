@@ -35,6 +35,8 @@ main:
   LOAD .af
   PUSH_D 2
   CALL NEW_OBJECT
+  FREE 5
+  LOAD [ei]
   STORE #1
   LOAD #1
   PUSH_S age
@@ -78,6 +80,8 @@ main:
   LOAD #1
   PUSH_D 1
   CALL NEW_OBJECT
+  FREE 3
+  LOAD [ei]
   STORE #2
   LOAD #2
   PUSH_S kernel

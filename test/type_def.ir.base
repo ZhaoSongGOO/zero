@@ -96,6 +96,8 @@ main:
   PUSH_N
   PUSH_D 3
   CALL NEW_OBJECT
+  FREE 7
+  LOAD [ei]
   ASSIGN
   STORE #1
   LOAD #2
@@ -110,6 +112,8 @@ main:
   CHECK 6
   PUSH_D 3
   CALL NEW_OBJECT
+  FREE 7
+  LOAD [ei]
   ASSIGN
   STORE #2
   LOAD #1
@@ -136,6 +140,8 @@ main:
   CHECK 6
   PUSH_D 3
   CALL NEW_OBJECT
+  FREE 7
+  LOAD [ei]
   ASSIGN
   STORE #2
   LOAD #2

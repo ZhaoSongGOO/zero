@@ -1,12 +1,30 @@
 __init__:
 main:
+  PUSH_S __data__
   PUSH_D 1
   PUSH_D 1
   CALL NEW_ARRAY
+  FREE 2
+  LOAD [ei]
+  PUSH_S count
+  PUSH_D 1
+  PUSH_D 2
+  CALL NEW_OBJECT
+  FREE 5
+  LOAD [ei]
   STORE #1
+  PUSH_S __data__
   PUSH_D 2
   PUSH_D 1
   CALL NEW_ARRAY
+  FREE 2
+  LOAD [ei]
+  PUSH_S count
+  PUSH_D 1
+  PUSH_D 2
+  CALL NEW_OBJECT
+  FREE 5
+  LOAD [ei]
   STORE #2
   LOAD #1
   CALL print
@@ -73,6 +91,8 @@ main:
   PUSH_S mike
   PUSH_D 1
   CALL NEW_OBJECT
+  FREE 3
+  LOAD [ei]
   ASSIGN
   STORE #1
   LOAD #2
@@ -80,6 +100,8 @@ main:
   PUSH_D 12
   PUSH_D 1
   CALL NEW_OBJECT
+  FREE 3
+  LOAD [ei]
   ASSIGN
   STORE #2
   LOAD #1

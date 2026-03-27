@@ -65,6 +65,8 @@ main:
   LOAD .printSequence
   PUSH_D 2
   CALL NEW_OBJECT
+  FREE 5
+  LOAD [ei]
   STORE #1
   PUSH_S name
   PUSH_S Zero Fibonacci Tool
@@ -72,6 +74,8 @@ main:
   LOAD #1
   PUSH_D 2
   CALL NEW_OBJECT
+  FREE 5
+  LOAD [ei]
   STORE #2
   LOAD #2
   PUSH_S name
