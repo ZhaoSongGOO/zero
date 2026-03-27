@@ -170,32 +170,31 @@ void run();
 
 struct source *read_source(const char *file_path) {
   if (file_path == NULL || strlen(file_path) == 0) {
-    return NULL;
+    ZERO_ASSERT(!(file_path == NULL || strlen(file_path) == 0),
+                "source file name is error!");
   }
 
   int fd = open(file_path, O_RDONLY | O_CLOEXEC);
-  if (fd == -1) {
-    return NULL;
-  }
+  ZERO_ASSERT(!(fd == -1), "source file (%s) open failed!", file_path);
 
   off_t file_size = lseek(fd, 0, SEEK_END);
   if (file_size == -1) {
     close(fd);
-    return NULL;
+    ZERO_ASSERT(false, "source file (%s) size if -1!", file_path);
   }
   lseek(fd, 0, SEEK_SET);
 
   char *file_content = (char *)malloc(file_size + 1);
   if (file_content == NULL) {
     close(fd);
-    return NULL;
+    ZERO_ASSERT(false, "malloc failed for read source %s!", file_path);
   }
 
   ssize_t read_bytes = read(fd, file_content, file_size);
   if (read_bytes == -1) {
     free(file_content);
     close(fd);
-    return NULL;
+    ZERO_ASSERT(false, "source file (%s) read failed!", file_path);
   }
   file_content[read_bytes] = '\0';
   close(fd);
@@ -2477,8 +2476,8 @@ typedef enum {
   VAL_INT,
   VAL_FLOAT,
   VAL_STR_INDEX,
-  VAL_OBJ_PTR,
-  VAL_ARR_PTR,
+  VAL_OBJ,
+  VAL_ARR,
   VAL_BOOL,
   VAL_FUNC,
   VAL_REF,
@@ -2993,7 +2992,7 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
     return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
   } else if (v->type == VAL_NULL) {
     return 0;
-  } else if (v->type == VAL_OBJ_PTR) {
+  } else if (v->type == VAL_OBJ) {
     return (int)v->data.ptr;
   } else {
     assert(false);
@@ -3163,7 +3162,7 @@ void print_object(VM *vm, ZValue *value) {
       ZValue *u = obj->entries[i].value;
       // if(u->type == VAL_REF){
       //   ZValue * u_u = (ZValue*)u->data.ptr;
-      //   if(u_u->type == VAL_OBJ_PTR){
+      //   if(u_u->type == VAL_OBJ){
       //     printf("[OBJ #%ld]", (int)u->data.ptr);
       //   }else{
       //     print_data(vm, u);
@@ -3184,10 +3183,10 @@ void print_ref(VM *vm, ZValue *v) {
   assert(v->type == VAL_REF);
   ZValue *d = (ZValue *)(v->data.ptr);
   switch (d->type) {
-  case VAL_ARR_PTR:
+  case VAL_ARR:
     print_arr(vm, (ZArray *)d->data.ptr);
     break;
-  case VAL_OBJ_PTR:
+  case VAL_OBJ:
     print_object(vm, v);
     break;
   case VAL_STR:
@@ -3212,7 +3211,7 @@ void new_array(VM *vm) {
   ZValue *count = vm->stacks[vm->sp--];
   assert(count->type == VAL_INT);
   ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-  data->type = VAL_ARR_PTR;
+  data->type = VAL_ARR;
   ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
   arr->length = count->data.i_val;
   arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
@@ -3233,7 +3232,7 @@ void new_object(VM *vm) {
   ZValue *count = vm->stacks[vm->sp--];
   assert(count->type == VAL_INT);
   ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-  data->type = VAL_OBJ_PTR;
+  data->type = VAL_OBJ;
   ZObject *arr = (ZObject *)malloc(sizeof(ZObject));
   arr->count = count->data.i_val;
   arr->entries = (ZPair *)malloc(sizeof(ZPair) * arr->count);
@@ -3283,7 +3282,7 @@ void zero_read(VM *vm) {
   }
   assert(v->type == VAL_REF);
   ZValue *obj_ref = (ZValue *)v->data.ptr;
-  assert(obj_ref->type == VAL_OBJ_PTR);
+  assert(obj_ref->type == VAL_OBJ);
   ZObject *obj = (ZObject *)obj_ref->data.ptr;
   ZValue *fdv = NULL;
   for (int i = 0; i < obj->count; i++) {
@@ -3389,9 +3388,9 @@ ZValue *copy(ZValue *src) {
     ref->data.ptr = copy((ZValue *)(src->data.ptr));
     return ref;
   } break;
-  case VAL_ARR_PTR: {
+  case VAL_ARR: {
     ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-    data->type = VAL_ARR_PTR;
+    data->type = VAL_ARR;
     ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
 
     ZArray *raw = (ZArray *)(src->data.ptr);
@@ -3404,9 +3403,9 @@ ZValue *copy(ZValue *src) {
     data->data.ptr = arr;
     return data;
   } break;
-  case VAL_OBJ_PTR: {
+  case VAL_OBJ: {
     ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-    data->type = VAL_OBJ_PTR;
+    data->type = VAL_OBJ;
     ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
     ZObject *raw = (ZObject *)(src->data.ptr);
     obj->count = raw->count;
@@ -3444,7 +3443,7 @@ void SET_INST_RUN(VM *vm, ZValue *value) {
   assert(ref->type == VAL_REF);
   assert(prop->type == VAL_STR_INDEX);
   ZValue *obj_wrapper = (ZObject *)ref->data.ptr;
-  assert(obj_wrapper->type == VAL_OBJ_PTR);
+  assert(obj_wrapper->type == VAL_OBJ);
   ZObject *obj = (ZObject *)obj_wrapper->data.ptr;
 
   const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
@@ -3520,7 +3519,7 @@ void GET_INST_RUN(VM *vm, ZValue *value) {
   assert(obj_ref->type == VAL_REF);
   assert(prop->type = VAL_STR_INDEX);
   ZValue *obj = (ZValue *)obj_ref->data.ptr;
-  assert(obj->type == VAL_OBJ_PTR);
+  assert(obj->type == VAL_OBJ);
   ZObject *raw_obj = (ZObject *)(obj->data.ptr);
   const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   for (int i = 0; i < raw_obj->count; i++) {
