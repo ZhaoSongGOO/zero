@@ -2490,16 +2490,19 @@ typedef enum {
   VAL_INT,
   VAL_FLOAT,
   VAL_STR_INDEX,
-  VAL_OBJ,
-  VAL_ARR,
   VAL_BOOL,
-  VAL_FUNC,
   VAL_REF,
-  VAL_STR,
   VAL_OFFSET,
   VAL_REGISTER,
   VAL_NULL,
 } ValueType;
+
+typedef enum {
+  REF_VAL_OBJ,
+  REF_VAL_ARR,
+  REF_VAL_FUNC,
+  REF_VAL_STR,
+} RefValueType;
 
 typedef struct {
   ValueType type;
@@ -2510,19 +2513,6 @@ typedef struct {
     void *ptr;
   } data;
 } ZValue;
-
-ZValue *new_null() {
-  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
-  n->type = VAL_NULL;
-  return n;
-}
-
-ZValue *new_string() {
-  ZValue *s = (ZValue *)malloc(sizeof(ZValue));
-  s->type = VAL_STR;
-  s->data.ptr = NULL;
-  return s;
-}
 
 typedef struct {
   int length;
@@ -2538,6 +2528,73 @@ typedef struct {
   int count;
   ZPair *entries;
 } ZObject;
+
+typedef struct {
+  char *c_str;
+} ZString;
+
+typedef struct {
+  // INSTRUCTION *instructions;
+  struct Vec *instructions;
+  bool is_builtin;
+  const char *name;
+  int params_count;
+} ZFunction;
+
+typedef struct {
+  RefValueType type;
+  union {
+    ZObject *obj;
+    ZArray *arr;
+    ZString *str;
+    ZFunction *func;
+  } data;
+} ZRefValue;
+
+ZValue *new_null() {
+  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
+  n->type = VAL_NULL;
+  return n;
+}
+
+ZValue *alloc_string(char *c_str) {
+  ZString *s = (ZString *)malloc(sizeof(ZString));
+  s->c_str = c_str;
+  ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
+  ref->type = REF_VAL_STR;
+  ref->data.str = s;
+  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
+  n->type = VAL_REF;
+  n->data.ptr = ref;
+  return n;
+}
+
+ZFunction *new_function() {
+  ZFunction *func = (ZFunction *)malloc(sizeof(ZFunction));
+  func->instructions = new_vec();
+  func->is_builtin = false;
+  func->name = NULL;
+  return func;
+}
+
+ZValue *alloc_function(const char *name) {
+  ZFunction *func = new_function();
+  func->name = name;
+  ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
+  ref->type = REF_VAL_FUNC;
+  ref->data.func = func;
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_REF;
+  v->data.ptr = ref;
+  return v;
+}
+
+ZValue *alloc_zvalue() {
+  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+  v->type = VAL_REF;
+  v->data.ptr = NULL;
+  return v;
+}
 
 typedef enum {
   I_PUSH,
@@ -2591,14 +2648,6 @@ INSTRUCTION *new_inst(INSTRUCTION_CODE code, ZValue *v) {
 }
 
 typedef struct {
-  // INSTRUCTION *instructions;
-  struct Vec *instructions;
-  bool is_builtin;
-  const char *name;
-  int params_count;
-} ZFunction;
-
-typedef struct {
   ZFunction *func;
   Context *ctx;
 } Runnable;
@@ -2609,14 +2658,6 @@ Context *new_context() {
   ctx->bp = 0;
   ctx->pc = 0;
   return ctx;
-}
-
-ZFunction *new_function() {
-  ZFunction *func = (ZFunction *)malloc(sizeof(ZFunction));
-  func->instructions = new_vec();
-  func->is_builtin = false;
-  func->name = NULL;
-  return func;
 }
 
 struct zero_vm {
@@ -2705,28 +2746,32 @@ ZValue *get_builtin_function_value(VM *vm, const char *name) {
   ZFunction *func = new_function();
   func->is_builtin = true;
   func->name = name;
-  ZValue *f = (ZValue *)malloc(sizeof(ZValue));
-  f->type = VAL_FUNC;
-  f->data.ptr = func;
+  ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
+  ref->type = REF_VAL_FUNC;
+  ref->data.func = func;
   ZValue *v = (ZValue *)malloc(sizeof(ZValue));
   v->type = VAL_REF;
-  v->data.ptr = f;
+  v->data.ptr = ref;
   return v;
 }
 
+ZValue *build_builtin_fuction(const char *name) {
+  ZValue *f = alloc_function(name);
+  ((ZRefValue *)(f->data.ptr))->data.func->is_builtin = true;
+  return f;
+}
+
 void init_builtin(VM *vm) {
-  map_insert(vm->symbols, "print", get_builtin_function_value(vm, "print"));
-  map_insert(vm->symbols, "NEW_ARRAY",
-             get_builtin_function_value(vm, "NEW_ARRAY"));
-  map_insert(vm->symbols, "NEW_OBJECT",
-             get_builtin_function_value(vm, "NEW_OBJECT"));
-  map_insert(vm->symbols, "__print", get_builtin_function_value(vm, "__print"));
+  map_insert(vm->symbols, "print", build_builtin_fuction("print"));
+  map_insert(vm->symbols, "NEW_ARRAY", build_builtin_fuction("NEW_ARRAY"));
+  map_insert(vm->symbols, "NEW_OBJECT", build_builtin_fuction("NEW_OBJECT"));
+  map_insert(vm->symbols, "__print", build_builtin_fuction("__print"));
 
-  map_insert(vm->symbols, "__open", get_builtin_function_value(vm, "__open"));
+  map_insert(vm->symbols, "__open", build_builtin_fuction("__open"));
 
-  map_insert(vm->symbols, "__read", get_builtin_function_value(vm, "__read"));
+  map_insert(vm->symbols, "__read", build_builtin_fuction("__read"));
 
-  map_insert(vm->symbols, "__close", get_builtin_function_value(vm, "__close"));
+  map_insert(vm->symbols, "__close", build_builtin_fuction("__close"));
 }
 
 const Map *GET_ACTIONS() {
@@ -2738,8 +2783,8 @@ const Map *GET_ACTIONS() {
 
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
-  ZFunction *f = new_function();
-  f->name = pair->key;
+  ZValue *f_v = alloc_function(pair->key);
+  ZFunction *f = ((ZRefValue *)(f_v->data.ptr))->data.func;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
     char *inst_str = store->get(store, i)->str;
@@ -2752,20 +2797,13 @@ void list_inst_store(MapPair *pair, void *data) {
     f->instructions->push(f->instructions, inst);
   }
 
-  ZValue *fvalue = (ZValue *)malloc(sizeof(ZValue));
-  fvalue->type = VAL_FUNC;
-  fvalue->data.ptr = f;
-
-  ZValue *value = (ZValue *)malloc(sizeof(ZValue));
-  value->type = VAL_REF;
-  value->data.ptr = fvalue;
   if (strcmp(pair->key, "__init__") == 0) {
-    vm->globals->push(vm->globals, value);
+    vm->globals->push(vm->globals, f_v);
   } else {
     if (strcmp(pair->key, "main") == 0) {
-      vm->entry = value;
+      vm->entry = f_v;
     }
-    map_insert(vm->symbols, pair->key, value);
+    map_insert(vm->symbols, pair->key, f_v);
   }
 }
 
@@ -2798,9 +2836,9 @@ void vm_link_progress(MapPair *pair, void *data) {
     INSTRUCTION *inst = (INSTRUCTION *)funcs->get(funcs, i);
     ZValue *zv = (ZValue *)r->value;
     assert(zv->type == VAL_REF);
-    ZValue *f = (ZValue *)zv->data.ptr;
-    assert(f->type == VAL_FUNC);
-    inst->v->data.ptr = zv->data.ptr;
+    ZRefValue *f = (ZRefValue *)zv->data.ptr;
+    assert(f->type == REF_VAL_FUNC);
+    ((ZRefValue *)(inst->v->data.ptr))->data.func = f->data.func;
   }
 }
 
@@ -3006,7 +3044,7 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
     return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
   } else if (v->type == VAL_NULL) {
     return 0;
-  } else if (v->type == VAL_OBJ) {
+  } else if (v->type == VAL_REF) {
     return (int)v->data.ptr;
   } else {
     assert(false);
@@ -3127,16 +3165,14 @@ void print_data(VM *vm, ZValue *v) {
   case VAL_NULL:
     printf("null");
     break;
-  case VAL_FUNC: {
-    ZFunction *f = (ZFunction *)v->data.ptr;
-    printf("[FUNCTION %s]", f->name);
-  } break;
   default:
     break;
   }
 }
 
-void print_arr(VM *vm, ZArray *arr) {
+void print_arr(VM *vm, ZValue *value) {
+  ZRefValue *v = (ZRefValue *)value->data.ptr;
+  ZArray *arr = v->data.arr;
   printf("[");
   for (int i = 0; i < arr->length; i++) {
     print_data(vm, *(arr->elements + i));
@@ -3150,8 +3186,8 @@ void print_arr(VM *vm, ZArray *arr) {
 void CALL_INST_RUN(VM *vm, ZValue *value);
 
 void print_object(VM *vm, ZValue *value) {
-  ZValue *v = (ZValue *)value->data.ptr;
-  ZObject *obj = (ZObject *)v->data.ptr;
+  ZRefValue *v = (ZRefValue *)value->data.ptr;
+  ZObject *obj = v->data.obj;
   ZValue *user_print_func = NULL;
   for (int i = 0; i < obj->count; i++) {
     if (strcmp("__str__", obj->entries[i].key) == 0) {
@@ -3195,18 +3231,23 @@ void print_object(VM *vm, ZValue *value) {
 
 void print_ref(VM *vm, ZValue *v) {
   assert(v->type == VAL_REF);
-  ZValue *d = (ZValue *)(v->data.ptr);
+  ZRefValue *d = (ZRefValue *)(v->data.ptr);
   switch (d->type) {
-  case VAL_ARR:
-    print_arr(vm, (ZArray *)d->data.ptr);
+  case REF_VAL_ARR:
+    print_arr(vm, v);
     break;
-  case VAL_OBJ:
+  case REF_VAL_OBJ:
     print_object(vm, v);
     break;
-  case VAL_STR:
-    printf("%s\n", d->data.ptr);
+  case REF_VAL_STR:
+    printf("%s\n", d->data.str->c_str);
+    break;
+  case REF_VAL_FUNC: {
+    ZFunction *f = d->data.func;
+    printf("[FUNCTION %s]", f->name);
+  } break;
   default:
-    print_data(vm, d);
+    assert(false);
     break;
   }
 }
@@ -3230,8 +3271,8 @@ void print(VM *vm) {
 void new_array(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
-  ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-  data->type = VAL_ARR;
+  ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
+  data->type = REF_VAL_ARR;
   ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
   arr->length = count->data.i_val;
   arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
@@ -3239,7 +3280,7 @@ void new_array(VM *vm) {
     ZValue *src = vm->stacks[vm->sp - arr->length + i];
     arr->elements[i] = copy(src);
   }
-  data->data.ptr = arr;
+  data->data.arr = arr;
   ZValue *i = (ZValue *)malloc(sizeof(ZValue));
   i->type = VAL_REF;
   i->data.ptr = data;
@@ -3257,8 +3298,8 @@ void new_array(VM *vm) {
 void new_object(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
-  ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-  data->type = VAL_OBJ;
+  ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
+  data->type = REF_VAL_OBJ;
   ZObject *arr = (ZObject *)malloc(sizeof(ZObject));
   arr->count = count->data.i_val;
   arr->entries = (ZPair *)malloc(sizeof(ZPair) * arr->count);
@@ -3270,7 +3311,7 @@ void new_object(VM *vm) {
     arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
     arr->entries[i].value = copy(value);
   }
-  data->data.ptr = arr;
+  data->data.obj = arr;
   ZValue *i = (ZValue *)malloc(sizeof(ZValue));
   i->type = VAL_REF;
   i->data.ptr = data;
@@ -3300,13 +3341,13 @@ void zero_open(VM *vm) {
 void zero_read(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   if (v->type == VAL_NULL) {
-    map_insert(vm->registers, "ei", new_string());
+    map_insert(vm->registers, "ei", alloc_string(NULL));
     return;
   }
   assert(v->type == VAL_REF);
-  ZValue *obj_ref = (ZValue *)v->data.ptr;
-  assert(obj_ref->type == VAL_OBJ);
-  ZObject *obj = (ZObject *)obj_ref->data.ptr;
+  ZRefValue *obj_ref = (ZRefValue *)v->data.ptr;
+  assert(obj_ref->type == REF_VAL_OBJ);
+  ZObject *obj = obj_ref->data.obj;
   ZValue *fdv = NULL;
   for (int i = 0; i < obj->count; i++) {
     if (strcmp("fd", obj->entries[i].key) == 0) {
@@ -3315,37 +3356,31 @@ void zero_read(VM *vm) {
     }
   }
   if (fdv == NULL) {
-    map_insert(vm->registers, "ei", new_string());
+    map_insert(vm->registers, "ei", alloc_string(NULL));
     return;
   }
   assert(fdv->type == VAL_INT);
   int fd = fdv->data.i_val;
   off_t file_size = lseek(fd, 0, SEEK_END);
   if (file_size == -1) {
-    map_insert(vm->registers, "ei", new_string());
+    map_insert(vm->registers, "ei", alloc_string(NULL));
     return;
   }
   lseek(fd, 0, SEEK_SET);
   char *file_content = (char *)malloc(file_size + 1);
   if (file_content == NULL) {
-    map_insert(vm->registers, "ei", new_string());
+    map_insert(vm->registers, "ei", alloc_string(NULL));
     return;
   }
   ssize_t read_bytes = read(fd, file_content, file_size);
   if (read_bytes == -1) {
     free(file_content);
-    map_insert(vm->registers, "ei", new_string());
+    map_insert(vm->registers, "ei", alloc_string(NULL));
     return;
   }
   file_content[read_bytes] = '\0';
 
-  ZValue *sf = (ZValue *)malloc(sizeof(ZValue));
-  sf->type = VAL_REF;
-
-  ZValue *s = new_string();
-  s->data.ptr = file_content;
-
-  sf->data.ptr = s;
+  ZValue *sf = alloc_string(file_content);
   map_insert(vm->registers, "ei", sf);
 }
 
@@ -3403,47 +3438,69 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
-ZValue *copy(ZValue *src) {
+ZRefValue *copy_ref(ZRefValue *src) {
   switch (src->type) {
-  case VAL_REF: {
-    ZValue *ref = (ZValue *)malloc(sizeof(ZValue));
-    ref->type = VAL_REF;
-    ref->data.ptr = copy((ZValue *)(src->data.ptr));
-    return ref;
-  } break;
-  case VAL_ARR: {
-    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-    data->type = VAL_ARR;
+  case REF_VAL_ARR: {
+    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
+    data->type = REF_VAL_ARR;
     ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
-
-    ZArray *raw = (ZArray *)(src->data.ptr);
+    ZArray *raw = src->data.arr;
     arr->length = raw->length;
     arr->elements = (ZValue *)malloc(sizeof(ZValue) * raw->length);
     for (int i = 0; i < arr->length; i++) {
       ZValue *src = raw->elements[i];
       arr->elements[i] = copy(src);
     }
-    data->data.ptr = arr;
+    data->data.arr = arr;
     return data;
   } break;
-  case VAL_OBJ: {
-    ZValue *data = (ZValue *)malloc(sizeof(ZValue));
-    data->type = VAL_OBJ;
+  case REF_VAL_OBJ: {
+    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
+    data->type = REF_VAL_OBJ;
     ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
-    ZObject *raw = (ZObject *)(src->data.ptr);
+    ZObject *raw = src->data.obj;
     obj->count = raw->count;
     obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
     for (int i = 0; i < obj->count; i++) {
       obj->entries[i].key = raw->entries[i].key;
       obj->entries[i].value = copy(raw->entries[i].value);
     }
-    data->data.ptr = obj;
+    data->data.obj = obj;
     return data;
+  } break;
+  case REF_VAL_FUNC: {
+    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
+    data->type = REF_VAL_FUNC;
+    // ZFunction don't copy
+    data->data.func = src->data.func;
+    return data;
+  } break;
+  case REF_VAL_STR: {
+    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
+    data->type = REF_VAL_STR;
+    ZString *s = (ZString *)malloc(sizeof(ZString));
+    size_t len = strlen(src->data.str->c_str);
+    s->c_str = (char *)malloc(sizeof(char) * (len + 1));
+    memcpy(s->c_str, src->data.str->c_str, len + 1);
+    data->data.str = s;
+    return data;
+  } break;
+  default:
+    break;
+  }
+}
+
+ZValue *copy(ZValue *src) {
+  switch (src->type) {
+  case VAL_REF: {
+    ZValue *ref = (ZValue *)malloc(sizeof(ZValue));
+    ref->type = VAL_REF;
+    ref->data.ptr = copy_ref((ZRefValue *)(src->data.ptr));
+    return ref;
   } break;
   case VAL_INT:
   case VAL_STR_INDEX:
   case VAL_BOOL:
-  case VAL_FUNC:
   case VAL_FLOAT:
   case VAL_NULL:
   case VAL_OFFSET:
@@ -3465,9 +3522,9 @@ void SET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *v = vm->stacks[vm->sp];
   assert(ref->type == VAL_REF);
   assert(prop->type == VAL_STR_INDEX);
-  ZValue *obj_wrapper = (ZObject *)ref->data.ptr;
-  assert(obj_wrapper->type == VAL_OBJ);
-  ZObject *obj = (ZObject *)obj_wrapper->data.ptr;
+  ZRefValue *obj_wrapper = (ZRefValue *)ref->data.ptr;
+  assert(obj_wrapper->type == REF_VAL_OBJ);
+  ZObject *obj = obj_wrapper->data.obj;
 
   const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   for (int i = 0; i < obj->count; i++) {
@@ -3541,9 +3598,9 @@ void GET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *prop = vm->stacks[vm->sp];
   assert(obj_ref->type == VAL_REF);
   assert(prop->type = VAL_STR_INDEX);
-  ZValue *obj = (ZValue *)obj_ref->data.ptr;
-  assert(obj->type == VAL_OBJ);
-  ZObject *raw_obj = (ZObject *)(obj->data.ptr);
+  ZRefValue *obj = (ZRefValue *)obj_ref->data.ptr;
+  assert(obj->type == REF_VAL_OBJ);
+  ZObject *raw_obj = obj->data.obj;
   const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   for (int i = 0; i < raw_obj->count; i++) {
     if (strcmp(raw_obj->entries[i].key, key) == 0) {
@@ -3560,9 +3617,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
     value = vm->stacks[vm->sp + value->data.i_val];
   }
   assert(value->type == VAL_REF);
-  value = (ZValue *)value->data.ptr;
-  assert(value->type == VAL_FUNC);
-  ZFunction *func = (ZFunction *)(value->data.ptr);
+  ZRefValue *ref = (ZRefValue *)value->data.ptr;
+  assert(ref->type == REF_VAL_FUNC);
+  ZFunction *func = ref->data.func;
   Runnable *runnable = (Runnable *)malloc(sizeof(Runnable));
   runnable->ctx = new_context();
   runnable->func = func;
@@ -3665,9 +3722,9 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
 
 void __INIT__RUN(VM *vm, ZValue *value) {
   assert(value->type == VAL_REF);
-  value = (ZValue *)value->data.ptr;
-  assert(value->type == VAL_FUNC);
-  ZFunction *func = (ZFunction *)(value->data.ptr);
+  ZRefValue *ref = (ZRefValue *)value->data.ptr;
+  assert(ref->type == REF_VAL_FUNC);
+  ZFunction *func = ref->data.func;
 
   Runnable *runnable = (Runnable *)malloc(sizeof(Runnable));
   runnable->ctx = new_context();
@@ -3793,11 +3850,11 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
       ZValue *f = (ZValue *)(pair->value);
       return new_inst(I_LOAD, f);
     } else {
-      ZValue *vf = (ZValue *)malloc(sizeof(ZValue));
-      vf->type = VAL_FUNC;
-      ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-      v->type = VAL_REF;
-      v->data.ptr = vf;
+      ZValue *v = alloc_zvalue();
+      ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
+      ref->type = REF_VAL_FUNC;
+      ref->data.func = NULL;
+      v->data.ptr = ref;
       INSTRUCTION *inst = new_inst(I_LOAD, v);
       MapPair *pair = map_get(vm->ready_link, value);
       if (pair == NULL) {
@@ -3856,11 +3913,11 @@ INSTRUCTION *NEW_PUSH_N_INSTRUCTION(VM *vm, const char *value) {
 
 INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] != '-') {
-    ZValue *vf = (ZValue *)malloc(sizeof(ZValue));
-    vf->type = VAL_FUNC;
-    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-    v->type = VAL_REF;
-    v->data.ptr = vf;
+    ZValue *v = alloc_zvalue();
+    ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
+    ref->type = REF_VAL_FUNC;
+    ref->data.func = NULL;
+    v->data.ptr = ref;
     INSTRUCTION *inst = new_inst(I_CALL, v);
     MapPair *pair = map_get(vm->ready_link, value);
     if (pair == NULL) {
