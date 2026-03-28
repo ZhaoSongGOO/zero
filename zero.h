@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "map.h"
+#include "mm.h"
 #include "vec.h"
 
 typedef enum {
@@ -2543,6 +2544,7 @@ typedef struct {
 
 typedef struct {
   RefValueType type;
+  uint32_t ref_count;
   union {
     ZObject *obj;
     ZArray *arr;
@@ -2551,49 +2553,139 @@ typedef struct {
   } data;
 } ZRefValue;
 
-ZValue *new_null() {
-  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
-  n->type = VAL_NULL;
-  return n;
+typedef struct zero_memory_allocator_params {
+  struct {
+    size_t str_length;
+  } str;
+
+  struct {
+    size_t elem_count;
+  } arr;
+
+  struct {
+    size_t kv_count;
+  } obj;
+  struct {
+    size_t inst_count;
+    bool new_build;
+  } func;
+
+  struct {
+    size_t register_name_size;
+  } reg;
+
+  struct {
+    bool is_shell;
+  } ref;
+} AllocatorParams;
+
+ZObject *allocator_object_data(MemoryManager *manager,
+                               AllocatorParams *params) {
+  ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
+  obj->count = params->obj.kv_count;
+  obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
+  manager->allocated_memory_size += sizeof(ZObject);
+  manager->allocated_memory_size += sizeof(ZPair) * obj->count;
+  return obj;
+}
+ZArray *allocator_array_data(MemoryManager *manager, AllocatorParams *params) {
+  ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
+  arr->length = params->arr.elem_count;
+  arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
+  manager->allocated_memory_size += sizeof(ZArray);
+  manager->allocated_memory_size += sizeof(ZValue *) * arr->length;
+  return arr;
 }
 
-ZValue *alloc_string(char *c_str) {
+ZString *allocator_string_data(MemoryManager *manager,
+                               AllocatorParams *params) {
   ZString *s = (ZString *)malloc(sizeof(ZString));
-  s->c_str = c_str;
-  ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
-  ref->type = REF_VAL_STR;
-  ref->data.str = s;
-  ZValue *n = (ZValue *)malloc(sizeof(ZValue));
-  n->type = VAL_REF;
-  n->data.ptr = ref;
-  return n;
+  if (params->str.str_length != 0) {
+    s->c_str = (char *)malloc(sizeof(char) * params->str.str_length);
+  } else {
+    s->c_str = NULL;
+  }
+  manager->allocated_memory_size += sizeof(ZString);
+  manager->allocated_memory_size += sizeof(char) * params->str.str_length;
+  return s;
 }
 
-ZFunction *new_function() {
+ZFunction *allocator_func_data(MemoryManager *manager,
+                               AllocatorParams *params) {
+  if (params != NULL && !params->func.new_build) {
+    return NULL;
+  }
   ZFunction *func = (ZFunction *)malloc(sizeof(ZFunction));
   func->instructions = new_vec();
   func->is_builtin = false;
   func->name = NULL;
+  manager->allocated_memory_size += sizeof(ZFunction);
   return func;
 }
 
-ZValue *alloc_function(const char *name) {
-  ZFunction *func = new_function();
-  func->name = name;
+ZRefValue *allocator_ref_data(MemoryManager *manager, int ref_type,
+                              AllocatorParams *params) {
   ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
-  ref->type = REF_VAL_FUNC;
-  ref->data.func = func;
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_REF;
-  v->data.ptr = ref;
-  return v;
+  ref->type = ref_type;
+  switch (ref_type) {
+  case REF_VAL_STR: {
+    ref->data.str = allocator_string_data(manager, params);
+  } break;
+  case REF_VAL_ARR: {
+    ref->data.arr = allocator_array_data(manager, params);
+  } break;
+  case REF_VAL_OBJ: {
+    ref->data.obj = allocator_object_data(manager, params);
+  } break;
+  case REF_VAL_FUNC: {
+    ref->data.func = allocator_func_data(manager, params);
+  } break;
+  default:
+    free(ref);
+    assert(false);
+  }
+  manager->allocated_memory_size += sizeof(ZRefValue);
+  ref->ref_count = 1;
+  return ref;
 }
 
-ZValue *alloc_zvalue() {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_REF;
-  v->data.ptr = NULL;
-  return v;
+ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
+                       AllocatorParams *params) {
+  switch (type) {
+  case VAL_REF: {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = VAL_REF;
+    manager->allocated_memory_size += sizeof(ZValue);
+    if (params == NULL || !params->ref.is_shell) {
+      v->data.ptr = allocator_ref_data(manager, ref_type, params);
+    } else {
+      v->data.ptr = NULL;
+    }
+    return v;
+  } break;
+  case VAL_BOOL:
+  case VAL_FLOAT:
+  case VAL_INT:
+  case VAL_NULL:
+  case VAL_OFFSET:
+  case VAL_STR_INDEX: {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = type;
+    manager->allocated_memory_size += sizeof(ZValue);
+    return v;
+  }
+  case VAL_REGISTER: {
+    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+    v->type = VAL_REGISTER;
+    v->data.ptr = (char *)malloc(sizeof(char) * params->reg.register_name_size);
+    manager->allocated_memory_size += sizeof(ZValue);
+    manager->allocated_memory_size +=
+        sizeof(char) * params->reg.register_name_size;
+    return v;
+  }
+  default:
+    assert(false);
+  }
 }
 
 typedef enum {
@@ -2631,9 +2723,25 @@ struct zero_context {
   int bp;
 };
 
-ZValue *copy(ZValue *src);
-
 #define Context struct zero_context
+
+struct zero_vm {
+  struct Vec *globals;
+  ZValue *entry;
+  Context *root_context;
+  Context *cur_context;
+  Map *ready_link;
+  int sp; // stack top
+  Map *registers;
+  Map *symbols; // string -> ZValue
+  struct Vec *cvalues;
+  MemoryManager *mm;
+  void *stacks[1024];
+};
+
+#define VM struct zero_vm
+
+ZValue *copy(VM *vm, ZValue *src);
 
 typedef struct {
   INSTRUCTION_CODE code;
@@ -2659,20 +2767,6 @@ Context *new_context() {
   ctx->pc = 0;
   return ctx;
 }
-
-struct zero_vm {
-  struct Vec *globals;
-  ZValue *entry;
-  Context *root_context;
-  Context *cur_context;
-  Map *ready_link;
-  int sp; // stack top
-  Map *registers;
-  Map *symbols; // string -> ZValue
-  struct Vec *cvalues;
-  void *stacks[1024];
-};
-#define VM struct zero_vm
 
 const Map *actions = NULL;
 
@@ -2742,36 +2836,25 @@ void init_actions() {
   map_insert(actions, "OR", NEW_OR_INSTRUCTION);
 }
 
-ZValue *get_builtin_function_value(VM *vm, const char *name) {
-  ZFunction *func = new_function();
-  func->is_builtin = true;
-  func->name = name;
-  ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
-  ref->type = REF_VAL_FUNC;
-  ref->data.func = func;
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_REF;
-  v->data.ptr = ref;
-  return v;
-}
-
-ZValue *build_builtin_fuction(const char *name) {
-  ZValue *f = alloc_function(name);
+ZValue *build_builtin_fuction(VM *vm, const char *name) {
+  ZValue *f = allocator_data(vm->mm, VAL_REF, REF_VAL_FUNC, NULL);
+  ((ZRefValue *)f->data.ptr)->data.func->name = name;
   ((ZRefValue *)(f->data.ptr))->data.func->is_builtin = true;
   return f;
 }
 
 void init_builtin(VM *vm) {
-  map_insert(vm->symbols, "print", build_builtin_fuction("print"));
-  map_insert(vm->symbols, "NEW_ARRAY", build_builtin_fuction("NEW_ARRAY"));
-  map_insert(vm->symbols, "NEW_OBJECT", build_builtin_fuction("NEW_OBJECT"));
-  map_insert(vm->symbols, "__print", build_builtin_fuction("__print"));
+  map_insert(vm->symbols, "print", build_builtin_fuction(vm, "print"));
+  map_insert(vm->symbols, "NEW_ARRAY", build_builtin_fuction(vm, "NEW_ARRAY"));
+  map_insert(vm->symbols, "NEW_OBJECT",
+             build_builtin_fuction(vm, "NEW_OBJECT"));
+  map_insert(vm->symbols, "__print", build_builtin_fuction(vm, "__print"));
 
-  map_insert(vm->symbols, "__open", build_builtin_fuction("__open"));
+  map_insert(vm->symbols, "__open", build_builtin_fuction(vm, "__open"));
 
-  map_insert(vm->symbols, "__read", build_builtin_fuction("__read"));
+  map_insert(vm->symbols, "__read", build_builtin_fuction(vm, "__read"));
 
-  map_insert(vm->symbols, "__close", build_builtin_fuction("__close"));
+  map_insert(vm->symbols, "__close", build_builtin_fuction(vm, "__close"));
 }
 
 const Map *GET_ACTIONS() {
@@ -2783,8 +2866,9 @@ const Map *GET_ACTIONS() {
 
 void list_inst_store(MapPair *pair, void *data) {
   VM *vm = (VM *)data;
-  ZValue *f_v = alloc_function(pair->key);
+  ZValue *f_v = allocator_data(vm->mm, VAL_REF, REF_VAL_FUNC, NULL);
   ZFunction *f = ((ZRefValue *)(f_v->data.ptr))->data.func;
+  f->name = pair->key;
   struct str_store *store = (struct str_store *)pair->value;
   for (int i = 0; i < store->count; i++) {
     char *inst_str = store->get(store, i)->str;
@@ -2870,9 +2954,10 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     if (vm->sp < target_position) {
       vm->sp = target_position;
       if (v->type == VAL_REF) {
-        ZValue *target = (ZValue *)malloc(sizeof(ZValue));
-        target->type = VAL_REF;
+        ZValue *target = allocator_data(
+            vm->mm, VAL_REF, 0, &(AllocatorParams){.ref.is_shell = true});
         target->data.ptr = v->data.ptr;
+        ((ZRefValue *)target->data.ptr)->ref_count += 1;
         vm->stacks[target_position] = target;
       } else {
         vm->stacks[target_position] = v;
@@ -2904,9 +2989,10 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     }
 
     if (v->type == VAL_REF) {
-      ZValue *target = (ZValue *)malloc(sizeof(ZValue));
-      target->type = VAL_REF;
+      ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
+                                      &(AllocatorParams){.ref.is_shell = true});
       target->data.ptr = v->data.ptr;
+      ((ZRefValue *)target->data.ptr)->ref_count += 1;
       vm->stacks[value->data.i_val] = target;
     } else {
       vm->stacks[value->data.i_val] = v;
@@ -2929,7 +3015,7 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
       vm->stacks[++vm->sp] = rv->value;
       rv->value = NULL;
     } else {
-      ZValue *v = (ZValue *)malloc(sizeof(ZValue));
+      ZValue *v = allocator_data(vm->mm, VAL_NULL, 0, NULL);
       v->type = VAL_NULL;
       vm->stacks[++vm->sp] = v;
     }
@@ -2946,7 +3032,7 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
-ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
+ZValue *inst_run_op(VM *vm, TOKEN_TYPE type, ZValue *left, ZValue *right) {
   if (left->type == VAL_REF) {
     left = (ZValue *)(left->data.ptr);
   }
@@ -2957,7 +3043,6 @@ ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
          left->type == VAL_BOOL);
   assert(right->type == VAL_INT || right->type == VAL_FLOAT ||
          right->type == VAL_BOOL);
-  ZValue *result = (ZValue *)malloc(sizeof(ZValue));
   bool is_int = false;
   if (left->type == VAL_INT || right->type == VAL_INT) {
     is_int = true;
@@ -2998,30 +3083,31 @@ ZValue *inst_run_op(TOKEN_TYPE type, ZValue *left, ZValue *right) {
     break;
   }
   if (is_int) {
-    result->type = VAL_INT;
+    ZValue *result = allocator_data(vm->mm, VAL_INT, 0, NULL);
     result->data.i_val = (int)s;
+    return result;
   } else {
-    result->type = VAL_FLOAT;
+    ZValue *result = allocator_data(vm->mm, VAL_FLOAT, 0, NULL);
     result->data.f_val = s;
+    return result;
   }
-  return result;
 }
 
 void ADD_INST_RUN(VM *vm, ZValue *value) {
   ZValue *result =
-      inst_run_op(TOKEN_ADD, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+      inst_run_op(vm, TOKEN_ADD, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
   vm->stacks[--(vm->sp)] = result;
 }
 
 void MINUS_INST_RUN(VM *vm, ZValue *value) {
   ZValue *result =
-      inst_run_op(TOKEN_MINUS, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+      inst_run_op(vm, TOKEN_MINUS, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
   vm->stacks[--(vm->sp)] = result;
 }
 
 void MULTI_INST_RUN(VM *vm, ZValue *value) {
   ZValue *result =
-      inst_run_op(TOKEN_MULTI, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+      inst_run_op(vm, TOKEN_MULTI, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
   vm->stacks[--(vm->sp)] = result;
 }
 
@@ -3044,8 +3130,7 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
 }
 
 void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
-  ZValue *result = (ZValue *)malloc(sizeof(ZValue));
-  result->type = VAL_BOOL;
+  ZValue *result = allocator_data(vm->mm, VAL_BOOL, 0, NULL);
   bool v = false;
   if (code >= I_G && code <= I_OR) {
     float left = get_number_value_from_zvalue(vm, vm->stacks[vm->sp - 1]);
@@ -3089,21 +3174,21 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
   } else if (code == I_NEGATE) {
     ZValue *rv = vm->stacks[vm->sp];
     float v = -1 * get_number_value_from_zvalue(vm, rv);
-    ZValue *re = (ZValue *)malloc(sizeof(ZValue));
     if (rv->type == VAL_REF) {
       rv = (ZValue *)rv->data.ptr;
     }
+    ZValue *re = NULL;
     switch (rv->type) {
     case VAL_INT: {
-      re->type = VAL_INT;
+      re = allocator_data(vm->mm, VAL_INT, 0, NULL);
       re->data.i_val = v;
     } break;
     case VAL_FLOAT: {
-      re->type = VAL_FLOAT;
+      re = allocator_data(vm->mm, VAL_FLOAT, 0, NULL);
       re->data.f_val = v;
     } break;
     case VAL_BOOL: {
-      re->type = VAL_FLOAT;
+      re = allocator_data(vm->mm, VAL_FLOAT, 0, NULL);
       re->data.b_val = v != 0;
     } break;
     default:
@@ -3121,7 +3206,7 @@ void ASSIGN_INST_RUN(VM *vm, ZValue *value) {
 
 void DIV_INST_RUN(VM *vm, ZValue *value) {
   ZValue *result =
-      inst_run_op(TOKEN_DIV, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
+      inst_run_op(vm, TOKEN_DIV, vm->stacks[vm->sp - 1], vm->stacks[vm->sp]);
   vm->stacks[--(vm->sp)] = result;
 }
 
@@ -3192,8 +3277,7 @@ void print_object(VM *vm, ZValue *value) {
     vm->stacks[++vm->sp] = value;
     // push function object
     vm->stacks[++vm->sp] = user_print_func;
-    ZValue *call_index = (ZValue *)malloc(sizeof(ZValue));
-    call_index->type = VAL_INT;
+    ZValue *call_index = allocator_data(vm->mm, VAL_INT, 0, NULL);
     call_index->data.i_val = 0;
     CALL_INST_RUN(vm, call_index);
     vm->sp -= 2;
@@ -3202,16 +3286,6 @@ void print_object(VM *vm, ZValue *value) {
     for (int i = 0; i < obj->count; i++) {
       printf("\"%s\":", obj->entries[i].key);
       ZValue *u = obj->entries[i].value;
-      // if(u->type == VAL_REF){
-      //   ZValue * u_u = (ZValue*)u->data.ptr;
-      //   if(u_u->type == VAL_OBJ){
-      //     printf("[OBJ #%ld]", (int)u->data.ptr);
-      //   }else{
-      //     print_data(vm, u);
-      //   }
-      // }else{
-      //   print_data(vm, u);
-      // }
       print_data(vm, u);
       if (i != obj->count - 1) {
         printf(", ");
@@ -3270,11 +3344,11 @@ void new_array(VM *vm) {
   arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
   for (int i = 0; i < arr->length; i++) {
     ZValue *src = vm->stacks[vm->sp - arr->length + i];
-    arr->elements[i] = copy(src);
+    arr->elements[i] = copy(vm, src);
   }
   data->data.arr = arr;
-  ZValue *i = (ZValue *)malloc(sizeof(ZValue));
-  i->type = VAL_REF;
+  ZValue *i = allocator_data(vm->mm, VAL_REF, 0,
+                             &(AllocatorParams){.ref.is_shell = true});
   i->data.ptr = data;
   map_insert(vm->registers, "ei", i);
 }
@@ -3301,11 +3375,11 @@ void new_object(VM *vm) {
     assert(key->type == VAL_STR_INDEX);
     ZValue *value = vm->stacks[stack_base + i * 2 + 1];
     arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
-    arr->entries[i].value = copy(value);
+    arr->entries[i].value = copy(vm, value);
   }
   data->data.obj = arr;
-  ZValue *i = (ZValue *)malloc(sizeof(ZValue));
-  i->type = VAL_REF;
+  ZValue *i = allocator_data(vm->mm, VAL_REF, 0,
+                             &(AllocatorParams){.ref.is_shell = true});
   i->data.ptr = data;
   map_insert(vm->registers, "ei", i);
 }
@@ -3316,16 +3390,15 @@ void zero_open(VM *vm) {
   const char *file_name = vm->cvalues->get(vm->cvalues, v->data.i_val);
   assert(file_name != NULL);
   if (file_name == NULL || strlen(file_name) == 0) {
-    map_insert(vm->registers, "ei", new_null());
+    map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
     return;
   }
   int fd = open(file_name, O_RDONLY | O_CLOEXEC);
   if (fd == -1) {
-    map_insert(vm->registers, "ei", new_null());
+    map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
     return;
   }
-  ZValue *f = (ZValue *)malloc(sizeof(ZValue));
-  f->type = VAL_INT;
+  ZValue *f = allocator_data(vm->mm, VAL_INT, 0, NULL);
   f->data.i_val = fd;
   map_insert(vm->registers, "ei", f);
 }
@@ -3333,7 +3406,9 @@ void zero_open(VM *vm) {
 void zero_read(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   if (v->type == VAL_NULL) {
-    map_insert(vm->registers, "ei", alloc_string(NULL));
+    map_insert(vm->registers, "ei",
+               allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                              &(AllocatorParams){.str.str_length = 0}));
     return;
   }
   assert(v->type == VAL_REF);
@@ -3348,31 +3423,44 @@ void zero_read(VM *vm) {
     }
   }
   if (fdv == NULL) {
-    map_insert(vm->registers, "ei", alloc_string(NULL));
+    map_insert(vm->registers, "ei",
+               allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                              &(AllocatorParams){.str.str_length = 0}));
     return;
   }
   assert(fdv->type == VAL_INT);
   int fd = fdv->data.i_val;
   off_t file_size = lseek(fd, 0, SEEK_END);
   if (file_size == -1) {
-    map_insert(vm->registers, "ei", alloc_string(NULL));
+    map_insert(vm->registers, "ei",
+               allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                              &(AllocatorParams){.str.str_length = 0}));
     return;
   }
   lseek(fd, 0, SEEK_SET);
   char *file_content = (char *)malloc(file_size + 1);
   if (file_content == NULL) {
-    map_insert(vm->registers, "ei", alloc_string(NULL));
+    map_insert(vm->registers, "ei",
+               allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                              &(AllocatorParams){.str.str_length = 0}));
     return;
   }
   ssize_t read_bytes = read(fd, file_content, file_size);
   if (read_bytes == -1) {
     free(file_content);
-    map_insert(vm->registers, "ei", alloc_string(NULL));
+    map_insert(vm->registers, "ei",
+               allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                              &(AllocatorParams){.str.str_length = 0}));
     return;
   }
   file_content[read_bytes] = '\0';
 
-  ZValue *sf = alloc_string(file_content);
+  ZValue *sf =
+      allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                     &(AllocatorParams){.str.str_length = file_size + 1});
+  memcpy(((ZRefValue *)sf->data.ptr)->data.str->c_str, file_content,
+         file_size + 1);
+  free(file_content);
   map_insert(vm->registers, "ei", sf);
 }
 
@@ -3430,51 +3518,43 @@ void JF_INST_RUN(VM *vm, ZValue *value) {
   }
 }
 
-ZRefValue *copy_ref(ZRefValue *src) {
+ZRefValue *copy_ref(VM *vm, ZRefValue *src) {
   switch (src->type) {
   case REF_VAL_ARR: {
-    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
-    data->type = REF_VAL_ARR;
-    ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
     ZArray *raw = src->data.arr;
-    arr->length = raw->length;
-    arr->elements = (ZValue *)malloc(sizeof(ZValue) * raw->length);
+    ZRefValue *data = allocator_ref_data(
+        vm->mm, REF_VAL_ARR, &(AllocatorParams){.arr.elem_count = raw->length});
+    ZArray *arr = data->data.arr;
     for (int i = 0; i < arr->length; i++) {
       ZValue *src = raw->elements[i];
-      arr->elements[i] = copy(src);
+      arr->elements[i] = copy(vm, src);
     }
-    data->data.arr = arr;
     return data;
   } break;
   case REF_VAL_OBJ: {
-    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
-    data->type = REF_VAL_OBJ;
-    ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
     ZObject *raw = src->data.obj;
-    obj->count = raw->count;
-    obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
+    ZRefValue *data = allocator_ref_data(
+        vm->mm, REF_VAL_OBJ, &(AllocatorParams){.obj.kv_count = raw->count});
+    ZObject *obj = data->data.obj;
     for (int i = 0; i < obj->count; i++) {
       obj->entries[i].key = raw->entries[i].key;
-      obj->entries[i].value = copy(raw->entries[i].value);
+      obj->entries[i].value = copy(vm, raw->entries[i].value);
     }
-    data->data.obj = obj;
     return data;
   } break;
   case REF_VAL_FUNC: {
-    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
-    data->type = REF_VAL_FUNC;
+    ZRefValue *data = allocator_ref_data(
+        vm->mm, REF_VAL_FUNC, &(AllocatorParams){.func.new_build = false});
     // ZFunction don't copy
     data->data.func = src->data.func;
     return data;
   } break;
   case REF_VAL_STR: {
-    ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
-    data->type = REF_VAL_STR;
-    ZString *s = (ZString *)malloc(sizeof(ZString));
-    size_t len = strlen(src->data.str->c_str);
-    s->c_str = (char *)malloc(sizeof(char) * (len + 1));
-    memcpy(s->c_str, src->data.str->c_str, len + 1);
-    data->data.str = s;
+    ZRefValue *data = allocator_ref_data(
+        vm->mm, REF_VAL_STR,
+        &(AllocatorParams){.str.str_length = strlen(src->data.str->c_str) + 1});
+    ZString *s = data->data.str;
+    memcpy(s->c_str, src->data.str->c_str, strlen(src->data.str->c_str) + 1);
     return data;
   } break;
   default:
@@ -3482,12 +3562,12 @@ ZRefValue *copy_ref(ZRefValue *src) {
   }
 }
 
-ZValue *copy(ZValue *src) {
+ZValue *copy(VM *vm, ZValue *src) {
   switch (src->type) {
   case VAL_REF: {
-    ZValue *ref = (ZValue *)malloc(sizeof(ZValue));
-    ref->type = VAL_REF;
-    ref->data.ptr = copy_ref((ZRefValue *)(src->data.ptr));
+    ZValue *ref = allocator_data(vm->mm, VAL_REF, 0,
+                                 &(AllocatorParams){.ref.is_shell = true});
+    ref->data.ptr = copy_ref(vm, (ZRefValue *)(src->data.ptr));
     return ref;
   } break;
   case VAL_INT:
@@ -3497,8 +3577,7 @@ ZValue *copy(ZValue *src) {
   case VAL_NULL:
   case VAL_OFFSET:
   case VAL_REGISTER: {
-    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-    v->type = src->type;
+    ZValue *v = allocator_data(vm->mm, src->type, 0, NULL);
     v->data = src->data;
     return v;
   }
@@ -3521,14 +3600,18 @@ void SET_INST_RUN(VM *vm, ZValue *value) {
   const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   for (int i = 0; i < obj->count; i++) {
     if (strcmp(obj->entries[i].key, key) == 0) {
-      ZValue *nv = (ZValue *)malloc(sizeof(ZValue));
-      nv->type = v->type;
       if (v->type == VAL_REF) {
+        ZValue *nv = allocator_data(vm->mm, VAL_REF, 0,
+                                    &(AllocatorParams){.ref.is_shell = true});
         nv->data.ptr = v->data.ptr;
+        ((ZRefValue *)nv->data.ptr)->ref_count += 1;
+        obj->entries[i].value = nv;
       } else {
+        ZValue *nv = allocator_data(vm->mm, v->type, 0, NULL);
+        nv->type = v->type;
         nv->data = v->data;
+        obj->entries[i].value = nv;
       }
-      obj->entries[i].value = nv;
       vm->sp -= 3;
       return;
     }
@@ -3787,32 +3870,30 @@ VM *new_vm() {
   vm->registers = new_map();
   vm->symbols = new_map();
   vm->cvalues = new_vec();
+  vm->mm = new_mm();
   map_insert(vm->registers, "ei", NULL);
   return vm;
 }
 
 INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] == '[') {
-    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
-    zv->type = VAL_REGISTER;
     int full_len = strlen(value);
     assert(full_len > 2);
     int content_len = full_len - 2;
-    char *name = (char *)malloc(sizeof(char) * (content_len + 1));
-    memcpy(name, value + 1, content_len);
-    name[content_len] = '\0';
-    zv->data.ptr = name;
+    ZValue *zv = allocator_data(
+        vm->mm, VAL_REGISTER, 0,
+        &(AllocatorParams){.reg.register_name_size = content_len + 1});
+    memcpy(zv->data.ptr, value + 1, content_len);
+    *((char *)zv->data.ptr + content_len) = '\0';
     return new_inst(I_STORE, zv);
   } else if (value[0] == '#') {
     int offset = (int)strtod(value + 1, NULL);
-    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
-    zv->type = VAL_OFFSET;
+    ZValue *zv = allocator_data(vm->mm, VAL_OFFSET, 0, NULL);
     zv->data.i_val = offset;
     return new_inst(I_STORE, zv);
   } else {
     int offset = (int)strtod(value, NULL);
-    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
-    zv->type = VAL_INT;
+    ZValue *zv = allocator_data(vm->mm, VAL_INT, 0, NULL);
     zv->data.i_val = offset;
     return new_inst(I_STORE, zv);
   }
@@ -3821,20 +3902,18 @@ INSTRUCTION *NEW_STORE_INSTRUCTION(VM *vm, const char *value) {
 INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] == '#') {
     int offset = (int)strtod(value + 1, NULL);
-    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
-    zv->type = VAL_OFFSET;
+    ZValue *zv = allocator_data(vm->mm, VAL_OFFSET, 0, NULL);
     zv->data.i_val = offset;
     return new_inst(I_LOAD, zv);
   } else if (value[0] == '[') {
-    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
-    zv->type = VAL_REGISTER;
     int full_len = strlen(value);
     assert(full_len > 2);
     int content_len = full_len - 2;
-    char *name = (char *)malloc(sizeof(char) * (content_len + 1));
-    memcpy(name, value + 1, content_len);
-    name[content_len] = '\0';
-    zv->data.ptr = name;
+    ZValue *zv = allocator_data(
+        vm->mm, VAL_REGISTER, 0,
+        &(AllocatorParams){.reg.register_name_size = content_len + 1});
+    memcpy(zv->data.ptr, value + 1, content_len);
+    *((char *)zv->data.ptr + content_len) = '\0';
     return new_inst(I_LOAD, zv);
   } else if (value[0] == '.') {
     MapPair *pair = map_get(vm->symbols, value + 1);
@@ -3842,11 +3921,8 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
       ZValue *f = (ZValue *)(pair->value);
       return new_inst(I_LOAD, f);
     } else {
-      ZValue *v = alloc_zvalue();
-      ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
-      ref->type = REF_VAL_FUNC;
-      ref->data.func = NULL;
-      v->data.ptr = ref;
+      ZValue *v = allocator_data(vm->mm, VAL_REF, REF_VAL_FUNC,
+                                 &(AllocatorParams){.func.new_build = false});
       INSTRUCTION *inst = new_inst(I_LOAD, v);
       MapPair *pair = map_get(vm->ready_link, value);
       if (pair == NULL) {
@@ -3861,55 +3937,46 @@ INSTRUCTION *NEW_LOAD_INSTRUCTION(VM *vm, const char *value) {
     }
   } else {
     int offset = (int)strtod(value, NULL);
-    ZValue *zv = (ZValue *)malloc(sizeof(ZValue));
-    zv->type = VAL_INT;
+    ZValue *zv = allocator_data(vm->mm, VAL_INT, 0, NULL);
     zv->data.i_val = offset;
     return new_inst(I_LOAD, zv);
   }
 }
 
 INSTRUCTION *NEW_PUSH_D_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_INT;
+  ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_PUSH, v);
 }
 
 INSTRUCTION *NEW_PUSH_F_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_FLOAT;
+  ZValue *v = allocator_data(vm->mm, VAL_FLOAT, 0, NULL);
   v->data.f_val = strtod(value, NULL);
   return new_inst(I_PUSH, v);
 }
 // do nothing now
 INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_BOOL;
+  ZValue *v = allocator_data(vm->mm, VAL_BOOL, 0, NULL);
   v->data.b_val = (int)strtod(value, NULL) == 1;
   return new_inst(I_PUSH, v);
 }
 
 INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_STR_INDEX;
+  ZValue *v = allocator_data(vm->mm, VAL_STR_INDEX, 0, NULL);
   vm->cvalues->push(vm->cvalues, value);
   v->data.i_val = vm->cvalues->count - 1;
   return new_inst(I_PUSH, v);
 }
 
 INSTRUCTION *NEW_PUSH_N_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_NULL;
+  ZValue *v = allocator_data(vm->mm, VAL_NULL, 0, NULL);
   return new_inst(I_PUSH, v);
 }
 
 INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value) {
   if (value[0] != '-') {
-    ZValue *v = alloc_zvalue();
-    ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
-    ref->type = REF_VAL_FUNC;
-    ref->data.func = NULL;
-    v->data.ptr = ref;
+    ZValue *v = allocator_data(vm->mm, VAL_REF, REF_VAL_FUNC,
+                               &(AllocatorParams){.func.new_build = false});
     INSTRUCTION *inst = new_inst(I_CALL, v);
     MapPair *pair = map_get(vm->ready_link, value);
     if (pair == NULL) {
@@ -3922,8 +3989,7 @@ INSTRUCTION *NEW_CALL_INSTRUCTION(VM *vm, const char *value) {
     store->push(store, inst);
     return inst;
   } else {
-    ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-    v->type = VAL_INT;
+    ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
     v->data.i_val = (int)strtod(value, NULL);
     return new_inst(I_CALL, v);
   }
@@ -3971,22 +4037,19 @@ INSTRUCTION *NEW_ASSIGN_INSTRUCTION(VM *vm, const char *value) {
 }
 
 INSTRUCTION *NEW_FREE_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_INT;
+  ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_FREE, v);
 }
 
 INSTRUCTION *NEW_JUMP_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_INT;
+  ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_JUMP, v);
 }
 
 INSTRUCTION *NEW_JF_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_INT;
+  ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_JF, v);
 }
@@ -4000,8 +4063,7 @@ INSTRUCTION *NEW_SET_INSTRUCTION(VM *vm, const char *value) {
 }
 
 INSTRUCTION *NEW_CHECK_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = (ZValue *)malloc(sizeof(ZValue));
-  v->type = VAL_INT;
+  ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
   v->data.i_val = (int)strtod(value, NULL);
   return new_inst(I_CHECK, v);
 }

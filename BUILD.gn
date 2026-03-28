@@ -3,6 +3,8 @@ executable("zero") {
     "//main.c",
     "//map.c",
     "//map.h",
+    "//mm.c",
+    "//mm.h",
     "//vec.c",
     "//vec.h",
     "//zero.h",
