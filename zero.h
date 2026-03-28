@@ -2751,6 +2751,11 @@ void deallocator_ref_data(MemoryManager *manager, ZRefValue *ref) {
   if (ref == NULL) {
     return;
   }
+  if (ref->ref_count >= 2) {
+    ref->ref_count -= 1;
+    return;
+  }
+  printf("DEBUG: free %ld\n", ref);
   switch (ref->type) {
   case REF_VAL_ARR: {
     deallocator_arr_data(manager, ref->data.arr);
@@ -2778,15 +2783,9 @@ void deallocator_data(MemoryManager *manager, ZValue *value) {
   switch (value->type) {
   case VAL_REF: {
     ZRefValue *ref = (ZRefValue *)value->data.ptr;
-    if (ref->ref_count == 0) {
-      deallocator_ref_data(manager, ref);
-      free(ref);
-      manager->allocated_memory_size -= sizeof(ZValue);
-    } else {
-      ref->ref_count -= 1;
-    }
-    manager->allocated_memory_size -= sizeof(ZRefValue);
+    deallocator_ref_data(manager, ref);
     free(value);
+    manager->allocated_memory_size -= sizeof(ZValue);
   } break;
   case VAL_INT:
   case VAL_BOOL:
@@ -2797,7 +2796,7 @@ void deallocator_data(MemoryManager *manager, ZValue *value) {
   case VAL_OFFSET: {
     free(value);
     manager->allocated_memory_size -= sizeof(ZValue);
-  }
+  } break;
   default:
     assert(false);
   }
@@ -3079,6 +3078,7 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       }
     } else {
       ZValue *target = vm->stacks[target_position];
+
       /*
       >>> a = {"name":"mike"}
       >>> a
@@ -3091,8 +3091,13 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       {'name': 'mike'}
       */
       if (v->type == VAL_REF) {
-        target->type = VAL_REF;
+        if (target->type != VAL_REF) {
+          target = allocator_data(vm->mm, VAL_REF, 0,
+                                  &(AllocatorParams){.ref.is_shell = true});
+        }
         target->data.ptr = v->data.ptr;
+        ((ZRefValue *)target->data.ptr)->ref_count += 1;
+        vm->stacks[target_position] = target;
       } else {
         vm->stacks[target_position] = v;
       }
@@ -3101,16 +3106,29 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
   } else {
     if (vm->sp < value->data.i_val) {
       vm->sp = value->data.i_val;
-    }
-
-    if (v->type == VAL_REF) {
-      ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
-                                      &(AllocatorParams){.ref.is_shell = true});
-      target->data.ptr = v->data.ptr;
-      ((ZRefValue *)target->data.ptr)->ref_count += 1;
-      vm->stacks[value->data.i_val] = target;
+      if (v->type == VAL_REF) {
+        ZValue *target = allocator_data(
+            vm->mm, VAL_REF, 0, &(AllocatorParams){.ref.is_shell = true});
+        target->data.ptr = v->data.ptr;
+        ((ZRefValue *)target->data.ptr)->ref_count += 1;
+        vm->stacks[value->data.i_val] = target;
+      } else {
+        vm->stacks[value->data.i_val] = v;
+      }
     } else {
-      vm->stacks[value->data.i_val] = v;
+      ZValue *target = vm->stacks[value->data.i_val];
+
+      if (v->type == VAL_REF) {
+        if (target->type != VAL_REF) {
+          target = allocator_data(vm->mm, VAL_REF, 0,
+                                  &(AllocatorParams){.ref.is_shell = true});
+        }
+        target->data.ptr = v->data.ptr;
+        ((ZRefValue *)target->data.ptr)->ref_count += 1;
+        vm->stacks[value->data.i_val] = target;
+      } else {
+        vm->stacks[value->data.i_val] = v;
+      }
     }
   }
 }
@@ -3123,7 +3141,17 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
   if (value->type == VAL_OFFSET) {
     int offset = value->data.i_val;
     ZValue *src = vm->stacks[vm->cur_context->bp + offset];
-    vm->stacks[++vm->sp] = src;
+    if (src->type == VAL_REF) {
+      ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
+                                      &(AllocatorParams){.ref.is_shell = true});
+      target->data.ptr = src->data.ptr;
+      ((ZRefValue *)target->data.ptr)->ref_count += 1;
+      vm->stacks[++vm->sp] = target;
+    } else {
+      ZValue *target = allocator_data(vm->mm, src->type, 0, NULL);
+      target->data = src->data;
+      vm->stacks[++vm->sp] = target;
+    }
   } else if (value->type == VAL_REGISTER) {
     MapPair *rv = map_get(vm->registers, (const char *)(value->data.ptr));
     if (rv->value != NULL) {
@@ -3141,13 +3169,28 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
       target_index = offset;
     */
     int offset = value->data.i_val;
-    vm->stacks[++vm->sp] = vm->stacks[offset];
+    ZValue *src = vm->stacks[offset];
+    if (src->type == VAL_REF) {
+      ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
+                                      &(AllocatorParams){.ref.is_shell = true});
+      target->data.ptr = src->data.ptr;
+      ((ZRefValue *)target->data.ptr)->ref_count += 1;
+      vm->stacks[++vm->sp] = target;
+    } else {
+      ZValue *target = allocator_data(vm->mm, src->type, 0, NULL);
+      target->data = src->data;
+      vm->stacks[++vm->sp] = target;
+    }
   } else if (value->type == VAL_REF) {
     /*
       LOAD .func_name
     */
     assert(((ZRefValue *)value->data.ptr)->type == REF_VAL_FUNC);
-    vm->stacks[++vm->sp] = value;
+    ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
+                                    &(AllocatorParams){.ref.is_shell = true});
+    target->data.ptr = value->data.ptr;
+    ((ZRefValue *)target->data.ptr)->ref_count += 1;
+    vm->stacks[++vm->sp] = target;
   } else {
     assert(false);
   }
@@ -3322,7 +3365,29 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
 
 void ASSIGN_INST_RUN(VM *vm, ZValue *value) {
   ZValue *source = vm->stacks[vm->sp--];
-  vm->stacks[vm->sp] = source;
+  ZValue *target = vm->stacks[vm->sp];
+  if (target->type == VAL_REF) {
+    deallocator_ref_data(vm->mm, target->data.ptr);
+    target->data.ptr = NULL;
+  } else {
+    deallocator_data(vm->mm, target);
+  }
+  if (source->type == VAL_REF) {
+    if (target->type != VAL_REF) {
+      target = allocator_data(vm->mm, VAL_REF, 0,
+                              &(AllocatorParams){.ref.is_shell = true});
+    }
+    target->data.ptr = source->data.ptr;
+    ((ZRefValue *)target->data.ptr)->ref_count += 1;
+    deallocator_data(vm->mm, source);
+    vm->stacks[vm->sp] = target;
+  } else {
+    if (target->type == VAL_REF) {
+      deallocator_data(vm->mm, target);
+    }
+
+    vm->stacks[vm->sp] = source;
+  }
 }
 
 void DIV_INST_RUN(VM *vm, ZValue *value) {
@@ -3782,18 +3847,23 @@ void CHECK_INST_RUN(VM *vm, ZValue *value) {
 void COPY_INST_RUN(VM *vm, ZValue *value) {
   ZValue *src = vm->stacks[vm->sp];
   assert(src->type == VAL_REF);
-  vm->stacks[++vm->sp] = src;
+  // vm->stacks[++vm->sp] = src;//
+  ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
+                                  &(AllocatorParams){.ref.is_shell = true});
+  target->data.ptr = src->data.ptr;
+  ((ZRefValue *)target->data.ptr)->ref_count += 1;
+  vm->stacks[++vm->sp] = target;
 }
 
 void GET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
+  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   assert(obj_ref->type == VAL_REF);
   assert(prop->type = VAL_STR_INDEX);
   ZRefValue *obj = (ZRefValue *)obj_ref->data.ptr;
   assert(obj->type == REF_VAL_OBJ);
   ZObject *raw_obj = obj->data.obj;
-  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
   for (int i = 0; i < raw_obj->count; i++) {
     if (strcmp(raw_obj->entries[i].key, key) == 0) {
       vm->stacks[--(vm->sp)] = raw_obj->entries[i].value;

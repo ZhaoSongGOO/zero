@@ -135,25 +135,6 @@ var c = 1.2;
 var d = "Hello";
 ```
 
-
-这四种数值都是非引用类型，如果将其作为函数参数，并期望在函数内部更改实参原值的属性，是不会生效的。例如。
-
-```js
-func swap(a, b) {
-  var c = a;
-  a = b;
-  b = c;
-}
-
-func main(){
-  var a = 1;
-  var b = 2;
-  swap(a, b);
-  print(a); // keep 1
-  print(b); // keep 2
-}
-```
-
 如果切实需要使用基础类型的引用类型，你需要使用标准库预定的引用类型。
 
 ```js

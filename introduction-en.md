@@ -114,18 +114,6 @@ var d = "Hello";    // String
 
 These are **value types**. When passed to a function, they are copied. Changes made inside the function do not affect the original variable.
 
-To use reference-based primitives, include the standard library:
-
-```js
-include("std");
-
-func main(){
-    var a_ref = Int(1);
-    var b_ref = Int(2);
-    swap(a_ref, b_ref);
-    print(a_ref); // Output: 2
-}
-```
 
 ### Dictionaries (Objects)
 
