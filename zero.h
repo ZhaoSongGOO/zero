@@ -2915,7 +2915,6 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
 }
 
 void LOAD_INST_RUN(VM *vm, ZValue *value) {
-  // printf("LOAD---> %ld\n", value);
   /*
     VAL_OFFSET: load value by bp and offset;
     target_index = bp + offset;
@@ -2923,14 +2922,7 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
   if (value->type == VAL_OFFSET) {
     int offset = value->data.i_val;
     ZValue *src = vm->stacks[vm->cur_context->bp + offset];
-    // if (src->type == VAL_REF) {
     vm->stacks[++vm->sp] = src;
-    // } else {
-    //   ZValue *zvalue = (ZValue *)malloc(sizeof(ZValue));
-    //   zvalue->type = src->type;
-    //   zvalue->data = src->data;
-    //   vm->stacks[++vm->sp] = zvalue;
-    // }
   } else if (value->type == VAL_REGISTER) {
     MapPair *rv = map_get(vm->registers, (const char *)(value->data.ptr));
     if (rv->value != NULL) {
