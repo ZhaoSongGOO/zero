@@ -1,0 +1,211 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Zero",
+  "scopeName": "source.zero",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#booleans"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    },
+    {
+      "include": "#function-definitions"
+    },
+    {
+      "include": "#type-definitions"
+    },
+    {
+      "include": "#variable-declarations"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.zero",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.zero",
+          "begin": "\\/\\*",
+          "end": "\\*\\/"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.zero",
+          "match": "\\b(func|var|return|if|else|while|include|typedef|new|null)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.zero",
+          "match": "\\b(int|bool|string|object)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.zero",
+          "begin": "\"",
+          "end": "\"",
+          "escapes": "\\."
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.zero",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "booleans": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.zero",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.zero",
+          "match": "[+\\-*/]"
+        },
+        {
+          "name": "keyword.operator.assignment.zero",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.comparison.zero",
+          "match": "(==|!=|>=|<=|>|<)"
+        },
+        {
+          "name": "keyword.operator.logical.zero",
+          "match": "(&&|\\|\\|)"
+        },
+        {
+          "name": "keyword.operator.logical.zero",
+          "match": "!"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.zero",
+          "match": "[;,.]"
+        },
+        {
+          "name": "punctuation.definition.group.zero",
+          "match": "[\\[\\](){}]"
+        }
+      ]
+    },
+    "function-definitions": {
+      "patterns": [
+        {
+          "begin": "\\bfunc\\s+",
+          "end": "\\)",
+          "beginCaptures": {
+            "0": {
+              "name": "keyword.control.zero"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.function.zero",
+              "match": "\\w+"
+            },
+            {
+              "begin": "\\(",
+              "end": "\\)",
+              "patterns": [
+                {
+                  "name": "variable.parameter.zero",
+                  "match": "\\w+"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "type-definitions": {
+      "patterns": [
+        {
+          "begin": "\\btypedef\\s+",
+          "end": "\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "keyword.control.zero"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.type.zero",
+              "match": "\\w+"
+            }
+          ]
+        }
+      ]
+    },
+    "variable-declarations": {
+      "patterns": [
+        {
+          "begin": "\\bvar\\s+",
+          "end": "\\;",
+          "beginCaptures": {
+            "0": {
+              "name": "keyword.control.zero"
+            }
+          },
+          "patterns": [
+            {
+              "name": "variable.other.zero",
+              "match": "\\w+"
+            }
+          ]
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.zero",
+          "match": "\\b\\w+\\b"
+        }
+      ]
+    }
+  }
+}

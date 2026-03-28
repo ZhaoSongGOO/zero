@@ -1,0 +1,52 @@
+{
+  "name": "zero-language-support",
+  "displayName": "Zero Language Support",
+  "description": "Syntax highlighting and basic support for the Zero programming language",
+  "version": "0.1.0",
+  "publisher": "zero-lang",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "zero",
+        "aliases": [
+          "Zero",
+          "zero"
+        ],
+        "extensions": [
+          ".z"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zero",
+        "scopeName": "source.zero",
+        "path": "./syntaxes/zero.tmLanguage.json"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onLanguage:zero"
+  ],
+  "main": "./extension.js",
+  "devDependencies": {
+    "@types/vscode": "^1.50.0",
+    "typescript": "^4.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build": "npm run compile && vsce package"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

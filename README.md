@@ -26,3 +26,5 @@ func main(){
 - [Introduction Chinese](./introduction-zh-cn.md)
 
 - [ASM](./asm.md)
+
+- [VS Code Extension](./zero-language-extension/README.md)
