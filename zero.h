@@ -3337,16 +3337,14 @@ void print(VM *vm) {
 void new_array(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
-  ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
-  data->type = REF_VAL_ARR;
-  ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
-  arr->length = count->data.i_val;
-  arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
+  ZRefValue *data = allocator_ref_data(
+      vm->mm, REF_VAL_ARR,
+      &(AllocatorParams){.arr.elem_count = count->data.i_val});
+  ZArray *arr = data->data.arr;
   for (int i = 0; i < arr->length; i++) {
     ZValue *src = vm->stacks[vm->sp - arr->length + i];
     arr->elements[i] = copy(vm, src);
   }
-  data->data.arr = arr;
   ZValue *i = allocator_data(vm->mm, VAL_REF, 0,
                              &(AllocatorParams){.ref.is_shell = true});
   i->data.ptr = data;
@@ -3364,20 +3362,18 @@ void new_array(VM *vm) {
 void new_object(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
-  ZRefValue *data = (ZRefValue *)malloc(sizeof(ZRefValue));
-  data->type = REF_VAL_OBJ;
-  ZObject *arr = (ZObject *)malloc(sizeof(ZObject));
-  arr->count = count->data.i_val;
-  arr->entries = (ZPair *)malloc(sizeof(ZPair) * arr->count);
-  for (int i = 0; i < arr->count; i++) {
-    int stack_base = vm->sp - arr->count * 2;
+  ZRefValue *data =
+      allocator_ref_data(vm->mm, REF_VAL_OBJ,
+                         &(AllocatorParams){.obj.kv_count = count->data.i_val});
+  ZObject *obj = data->data.obj;
+  for (int i = 0; i < obj->count; i++) {
+    int stack_base = vm->sp - obj->count * 2;
     ZValue *key = vm->stacks[stack_base + i * 2];
     assert(key->type == VAL_STR_INDEX);
     ZValue *value = vm->stacks[stack_base + i * 2 + 1];
-    arr->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
-    arr->entries[i].value = copy(vm, value);
+    obj->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
+    obj->entries[i].value = copy(vm, value);
   }
-  data->data.obj = arr;
   ZValue *i = allocator_data(vm->mm, VAL_REF, 0,
                              &(AllocatorParams){.ref.is_shell = true});
   i->data.ptr = data;
