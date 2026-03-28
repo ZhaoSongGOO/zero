@@ -3027,8 +3027,14 @@ void LOAD_INST_RUN(VM *vm, ZValue *value) {
     */
     int offset = value->data.i_val;
     vm->stacks[++vm->sp] = vm->stacks[offset];
-  } else {
+  } else if (value->type == VAL_REF) {
+    /*
+      LOAD .func_name
+    */
+    assert(((ZRefValue *)value->data.ptr)->type == REF_VAL_FUNC);
     vm->stacks[++vm->sp] = value;
+  } else {
+    assert(false);
   }
 }
 
