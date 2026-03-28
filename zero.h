@@ -2583,7 +2583,12 @@ ZObject *allocator_object_data(MemoryManager *manager,
                                AllocatorParams *params) {
   ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
   obj->count = params->obj.kv_count;
-  obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
+  if (obj->count != 0) {
+    obj->entries = (ZPair *)malloc(sizeof(ZPair) * obj->count);
+  } else {
+    obj->entries = NULL;
+  }
+
   manager->allocated_memory_size += sizeof(ZObject);
   manager->allocated_memory_size += sizeof(ZPair) * obj->count;
   return obj;
@@ -2591,7 +2596,12 @@ ZObject *allocator_object_data(MemoryManager *manager,
 ZArray *allocator_array_data(MemoryManager *manager, AllocatorParams *params) {
   ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
   arr->length = params->arr.elem_count;
-  arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
+  if (arr->length != 0) {
+    arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
+  } else {
+    arr->elements = NULL;
+  }
+
   manager->allocated_memory_size += sizeof(ZArray);
   manager->allocated_memory_size += sizeof(ZValue *) * arr->length;
   return arr;
@@ -2682,6 +2692,111 @@ ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
     manager->allocated_memory_size +=
         sizeof(char) * params->reg.register_name_size;
     return v;
+  }
+  default:
+    assert(false);
+  }
+}
+
+void deallocator_data(MemoryManager *manager, ZValue *value);
+
+void deallocator_sting_data(MemoryManager *manager, ZString *str) {
+  if (str == NULL) {
+    return;
+  }
+  if (str->c_str != NULL) {
+    free(str->c_str);
+    manager->allocated_memory_size -= sizeof(char) * (strlen(str->c_str) + 1);
+  }
+  free(str);
+  manager->allocated_memory_size -= sizeof(ZString);
+}
+
+void deallocator_func_data(MemoryManager *manager, ZFunction *func) {
+  // ZFunction is GOD! can't be free~
+  return;
+}
+
+void deallocator_arr_data(MemoryManager *manager, ZArray *arr) {
+  if (arr == NULL) {
+    return;
+  }
+  if (arr->length != 0) {
+    for (int i = 0; i < arr->length; i++) {
+      ZValue *e = arr->elements[i];
+      deallocator_data(manager, e);
+    }
+  }
+  free(arr);
+  manager->allocated_memory_size -= sizeof(ZArray);
+}
+
+void deallocator_obj_data(MemoryManager *manager, ZObject *obj) {
+  if (obj == NULL) {
+    return;
+  }
+  if (obj->count != 0) {
+    for (int i = 0; i < obj->count; i++) {
+      ZValue *e = obj->entries[i].value;
+      deallocator_data(manager, e);
+    }
+    manager->allocated_memory_size -= sizeof(ZPair);
+    free(obj->entries);
+  }
+  free(obj);
+  manager->allocated_memory_size -= sizeof(ZObject);
+}
+
+void deallocator_ref_data(MemoryManager *manager, ZRefValue *ref) {
+  if (ref == NULL) {
+    return;
+  }
+  switch (ref->type) {
+  case REF_VAL_ARR: {
+    deallocator_arr_data(manager, ref->data.arr);
+  } break;
+  case REF_VAL_FUNC: {
+    deallocator_func_data(manager, ref->data.func);
+  } break;
+  case REF_VAL_OBJ: {
+    deallocator_obj_data(manager, ref->data.obj);
+  } break;
+  case REF_VAL_STR: {
+    deallocator_sting_data(manager, ref->data.str);
+  } break;
+  default:
+    assert(false);
+  }
+  free(ref);
+  manager->allocated_memory_size -= sizeof(ZRefValue);
+}
+
+void deallocator_data(MemoryManager *manager, ZValue *value) {
+  if (value == NULL) {
+    return;
+  }
+  switch (value->type) {
+  case VAL_REF: {
+    ZRefValue *ref = (ZRefValue *)value->data.ptr;
+    if (ref->ref_count == 0) {
+      deallocator_ref_data(manager, ref);
+      free(ref);
+      manager->allocated_memory_size -= sizeof(ZValue);
+    } else {
+      ref->ref_count -= 1;
+    }
+    manager->allocated_memory_size -= sizeof(ZRefValue);
+    free(value);
+  } break;
+  case VAL_INT:
+  case VAL_BOOL:
+  case VAL_FLOAT:
+  case VAL_NULL:
+  case VAL_STR_INDEX:
+  case VAL_REGISTER:
+  case VAL_OFFSET: {
+    free(value);
+    manager->allocated_memory_size -= sizeof(ZValue);
   }
   default:
     assert(false);
