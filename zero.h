@@ -2881,6 +2881,11 @@ Context *new_context() {
   return ctx;
 }
 
+void free_runnable(Runnable *runnable) {
+  free(runnable->ctx);
+  free(runnable);
+}
+
 const Map *actions = NULL;
 
 typedef INSTRUCTION *(*action_for_inst)(VM *vm, const char *value);
@@ -3948,6 +3953,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   if (func->is_builtin) {
     call_builtin_function(vm, func);
     vm->cur_context = runnable->ctx->parent;
+    free_runnable(runnable);
     return;
   }
   struct Vec *code = func->instructions;
@@ -4037,6 +4043,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   } else {
     vm->sp = runnable->ctx->bp;
   }
+  free_runnable(runnable);
   for (int i = vm->sp + 1; i <= cur_sp; i++) {
     deallocator_data(vm->mm, vm->stacks[i]);
   }

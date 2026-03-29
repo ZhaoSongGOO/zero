@@ -124,7 +124,7 @@ func main(){
 }
 ```
 
-11. 📌 for member functio, support `this` keyword.
+11. ✅ for member functio, support `this` keyword.
 
 ```js
 func k(a){
@@ -151,4 +151,11 @@ func main(){
     stdFunction();
 }
 ```
+13. ✅ Garbage Collection
+
+14. ✅ Reference Type Refactoring
+
+15. 📌 Error Reporting Optimization
+
+16. 📌 Debugger Support
 
