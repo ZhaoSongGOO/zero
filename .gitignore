@@ -1,3 +1,4 @@
 out
 *.ir
 cmake_out
+*.log
