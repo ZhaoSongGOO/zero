@@ -9,7 +9,7 @@
         "type": "cppdbg",
         "request": "launch",
         "program": "${workspaceFolder}/out/zero",
-        "args": ["${workspaceFolder}/main.z"],
+        "args": ["-i", "${workspaceFolder}/main.z"],
         "stopAtEntry": false,
         "cwd": "${fileDirname}",
         "environment": [],

@@ -17,6 +17,7 @@
 #
 declare_args() {
   # ==> Please add your project-specific GN arguments here.
+  enable_memory_test = false
 }
 
 # ==============================================================================

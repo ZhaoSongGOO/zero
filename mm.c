@@ -1,11 +1,11 @@
 #include "mm.h"
+#include <fcntl.h>
 #include <stdarg.h>
-#include <stdlib.h>
-#include <fcntl.h>    
-#include <unistd.h>   
-#include <string.h>   
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 void get_dump_file_name(char *buffer, size_t max_len) {
   time_t raw_time;
@@ -18,7 +18,11 @@ void get_dump_file_name(char *buffer, size_t max_len) {
 #define KB 1024
 #define MB (1024 * 1024)
 
+#ifndef MEMORY_TEST
 #define DUMP_THRESHOLD (10 * MB)
+#else
+#define DUMP_THRESHOLD 0
+#endif
 
 MemoryManager *new_mm() {
   MemoryManager *mm = (MemoryManager *)malloc(sizeof(MemoryManager));
@@ -46,9 +50,10 @@ void DUMP_MEMORY(MemoryManager *mm, const char *fmt, ...) {
   va_end(args);
 
   if (mm->dump_file_fd == -1) {
-    char * dump_file_name = (char*)malloc(sizeof(char) * 30);
+    char *dump_file_name = (char *)malloc(sizeof(char) * 30);
     get_dump_file_name(dump_file_name, 30);
-    mm->dump_file_fd = open(dump_file_name, O_WRONLY | O_APPEND | O_CREAT, 0644);
+    mm->dump_file_fd =
+        open(dump_file_name, O_WRONLY | O_APPEND | O_CREAT, 0644);
   }
 
   if (mm->dump_file_fd == -1) {
@@ -59,7 +64,7 @@ void DUMP_MEMORY(MemoryManager *mm, const char *fmt, ...) {
 
 void memory_allocator(MemoryManager *mm, size_t size) {
   mm->allocated_memory_size += size;
-  if(mm->allocated_memory_size >= DUMP_THRESHOLD){
+  if (mm->allocated_memory_size >= DUMP_THRESHOLD) {
     DUMP_MEMORY(mm, "Memory %d Byte\n", mm->allocated_memory_size);
   }
 }
@@ -69,7 +74,7 @@ void memory_deallocator(MemoryManager *mm, size_t size) {
   } else {
     mm->allocated_memory_size -= size;
   }
-  if(mm->allocated_memory_size >= DUMP_MEMORY){
+  if (mm->allocated_memory_size >= DUMP_MEMORY) {
     DUMP_MEMORY(mm, "Memory %d Byte\n", mm->allocated_memory_size);
   }
 }

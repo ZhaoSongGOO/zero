@@ -1,5 +1,7 @@
 include("std");
 func main(){
-    var l = [Int(1), 2.3, 1 * 3, "Hello"];
-    print(l);
+    var x = 10000;
+    while(x >= 0){
+        x = x - 1;
+    }
 }

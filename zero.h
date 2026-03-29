@@ -3093,7 +3093,7 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
       }
     } else {
       ZValue *target = vm->stacks[target_position];
-      if (target_position != vm->sp) {
+      if (target_position != vm->sp + 1) {
         deallocator_data(vm->mm, target);
       }
       if (v->type == VAL_REF) {
@@ -3127,7 +3127,7 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
 
     } else {
       ZValue *target = vm->stacks[value->data.i_val];
-      if (value->data.i_val != vm->sp) {
+      if (value->data.i_val != vm->sp + 1) {
         deallocator_data(vm->mm, target);
       }
 
@@ -3281,6 +3281,7 @@ ZValue *inst_run_op(VM *vm, TOKEN_TYPE type, ZValue *left, ZValue *right) {
     result->data.f_val = s;
   }
   deallocator_data(vm->mm, vm->stacks[vm->sp]);
+  deallocator_data(vm->mm, vm->stacks[vm->sp - 1]);
   return result;
 }
 
@@ -3356,11 +3357,13 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
       break;
     }
     result->data.b_val = v;
-    vm->stacks[vm->sp - 1] = result;
-    deallocator_data(vm->mm, vm->stacks[vm->sp--]);
+    deallocator_data(vm->mm, vm->stacks[vm->sp]);
+    deallocator_data(vm->mm, vm->stacks[vm->sp - 1]);
+    vm->stacks[--vm->sp] = result;
   } else if (code == I_NOT) {
     float right = get_number_value_from_zvalue(vm, vm->stacks[vm->sp]);
     result->data.b_val = !right;
+    deallocator_data(vm->mm, vm->stacks[vm->sp]);
     vm->stacks[vm->sp] = result;
   } else if (code == I_NEGATE) {
     ZValue *rv = vm->stacks[vm->sp];
@@ -3386,6 +3389,7 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
       assert(false);
       break;
     }
+    deallocator_data(vm->mm, vm->stacks[vm->sp]);
     vm->stacks[vm->sp] = re;
   }
 }
@@ -3406,14 +3410,13 @@ void ASSIGN_INST_RUN(VM *vm, ZValue *value) {
     }
     target->data.ptr = source->data.ptr;
     ((ZRefValue *)target->data.ptr)->ref_count += 1;
-    deallocator_data(vm->mm, source);
     vm->stacks[vm->sp] = target;
   } else {
     ZValue *new_source = allocator_data(vm->mm, source->type, 0, NULL);
     new_source->data = source->data;
-    deallocator_data(vm->mm, source);
     vm->stacks[vm->sp] = new_source;
   }
+  deallocator_data(vm->mm, source);
 }
 
 void DIV_INST_RUN(VM *vm, ZValue *value) {
@@ -3927,13 +3930,6 @@ void GET_INST_RUN(VM *vm, ZValue *value) {
 }
 
 void CALL_INST_RUN(VM *vm, ZValue *value) {
-  // uint64_t size_kb = vm->mm->allocated_memory_size / 1024;
-  // if(size_kb / 1024 <= 10){
-  //     printf("Memory: %ld Kb\n", size_kb);
-  // }else{
-  //   printf("Memory: %ld Mb\n", size_kb / 1024);
-  // }
-
   // call from stack, eg: CALL -1
   if (value->type == VAL_INT) {
     value = vm->stacks[vm->sp + value->data.i_val];
