@@ -3059,6 +3059,42 @@ void PUSH_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[++vm->sp] = copy(vm, value);
 }
 
+void store_inst_run_helper(VM *vm, ZValue *v, int target_position) {
+  // is new variable store,
+  if (vm->sp < target_position) {
+    vm->sp = target_position;
+    if (v->type == VAL_REF) {
+      ZValue *target = allocator_data(vm->mm, VAL_REF, 0,
+                                      &(AllocatorParams){.ref.is_shell = true});
+      target->data.ptr = v->data.ptr;
+      ((ZRefValue *)target->data.ptr)->ref_count += 1;
+      vm->stacks[target_position] = target;
+    } else {
+      ZValue *new_v = allocator_data(vm->mm, v->type, 0, NULL);
+      new_v->data = v->data;
+      vm->stacks[target_position] = new_v;
+    }
+  } else {
+    ZValue *target = vm->stacks[target_position];
+    if (target_position != vm->sp + 1) {
+      deallocator_data(vm->mm, target);
+    }
+    if (v->type == VAL_REF) {
+      target = allocator_data(vm->mm, VAL_REF, 0,
+                              &(AllocatorParams){.ref.is_shell = true});
+
+      target->data.ptr = v->data.ptr;
+      ((ZRefValue *)target->data.ptr)->ref_count += 1;
+      vm->stacks[target_position] = target;
+    } else {
+      ZValue *new_v = allocator_data(vm->mm, v->type, 0, NULL);
+      new_v->data = v->data;
+      vm->stacks[target_position] = new_v;
+    }
+  }
+  deallocator_data(vm->mm, v);
+}
+
 void STORE_INST_RUN(VM *vm, ZValue *value) {
   ZValue *v = vm->stacks[vm->sp--];
   if (value->type == VAL_REGISTER) {
@@ -3082,73 +3118,9 @@ void STORE_INST_RUN(VM *vm, ZValue *value) {
     itself.
     */
     int target_position = value->data.i_val + vm->cur_context->bp;
-    // is new variable store,
-    if (vm->sp < target_position) {
-      vm->sp = target_position;
-      if (v->type == VAL_REF) {
-        ZValue *target = allocator_data(
-            vm->mm, VAL_REF, 0, &(AllocatorParams){.ref.is_shell = true});
-        target->data.ptr = v->data.ptr;
-        ((ZRefValue *)target->data.ptr)->ref_count += 1;
-        vm->stacks[target_position] = target;
-      } else {
-        ZValue *new_v = allocator_data(vm->mm, v->type, 0, NULL);
-        new_v->data = v->data;
-        vm->stacks[target_position] = new_v;
-      }
-    } else {
-      ZValue *target = vm->stacks[target_position];
-      if (target_position != vm->sp + 1) {
-        deallocator_data(vm->mm, target);
-      }
-      if (v->type == VAL_REF) {
-        target = allocator_data(vm->mm, VAL_REF, 0,
-                                &(AllocatorParams){.ref.is_shell = true});
-
-        target->data.ptr = v->data.ptr;
-        ((ZRefValue *)target->data.ptr)->ref_count += 1;
-        vm->stacks[target_position] = target;
-      } else {
-        ZValue *new_v = allocator_data(vm->mm, v->type, 0, NULL);
-        new_v->data = v->data;
-        vm->stacks[target_position] = new_v;
-      }
-    }
-    deallocator_data(vm->mm, v);
+    store_inst_run_helper(vm, v, target_position);
   } else {
-    if (vm->sp < value->data.i_val) {
-      vm->sp = value->data.i_val;
-      if (v->type == VAL_REF) {
-        ZValue *target = allocator_data(
-            vm->mm, VAL_REF, 0, &(AllocatorParams){.ref.is_shell = true});
-        target->data.ptr = v->data.ptr;
-        ((ZRefValue *)target->data.ptr)->ref_count += 1;
-        vm->stacks[value->data.i_val] = target;
-      } else {
-        ZValue *new_v = allocator_data(vm->mm, v->type, 0, NULL);
-        new_v->data = v->data;
-        vm->stacks[value->data.i_val] = new_v;
-      }
-
-    } else {
-      ZValue *target = vm->stacks[value->data.i_val];
-      if (value->data.i_val != vm->sp + 1) {
-        deallocator_data(vm->mm, target);
-      }
-
-      if (v->type == VAL_REF) {
-        target = allocator_data(vm->mm, VAL_REF, 0,
-                                &(AllocatorParams){.ref.is_shell = true});
-        target->data.ptr = v->data.ptr;
-        ((ZRefValue *)target->data.ptr)->ref_count += 1;
-        vm->stacks[value->data.i_val] = target;
-      } else {
-        ZValue *new_v = allocator_data(vm->mm, v->type, 0, NULL);
-        new_v->data = v->data;
-        vm->stacks[value->data.i_val] = new_v;
-      }
-    }
-    deallocator_data(vm->mm, v);
+    store_inst_run_helper(vm, v, value->data.i_val);
   }
 }
 
