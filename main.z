@@ -1,7 +1,10 @@
 include("std");
 func main(){
-    var x = 10000;
+    var x = 100;
+    var y = 0;
     while(x >= 0){
+        y = y + x;
         x = x - 1;
     }
+    print(y);
 }

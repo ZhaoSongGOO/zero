@@ -96,12 +96,18 @@ struct number {
   };
 };
 
+struct token_info {
+  int col;
+  int row;
+};
+
 struct token {
   TOKEN_TYPE type;
   union {
     int symbol_index;
     struct number number_value;
   } value;
+  struct token_info info;
 };
 
 struct str_item {
@@ -132,6 +138,8 @@ struct scanner {
   struct token next_token;
   struct str_store *symbol;
   unsigned int index;
+  int col;
+  int row;
 };
 
 struct scanner *scanner_init(struct source *source_file);
@@ -297,6 +305,8 @@ struct scanner *scanner_init(struct source *source_file) {
   s->symbol = str_store_init();
   s->cur_token = next_token(s);
   s->next_token = next_token(s);
+  s->col = 0;
+  s->row = 0;
   return s;
 }
 
@@ -337,57 +347,63 @@ struct token scanner_letter(struct scanner *s) {
   unsigned int si =
       s->symbol->insert(s->symbol, s->source->content + s->index, size);
   s->index = s->index + size;
+  struct token_info info = {.col = s->col, .row = s->row};
+  s->col += size;
   const char *str = s->symbol->get(s->symbol, si)->str;
   if (is_keyword(str)) {
     if (strcmp(str, "true") == 0) {
       return (struct token){
           .type = TOKEN_NUM,
-          .value = {.number_value = {.type = NUMBER_BOOL, .bool_value = true}}};
+          .value = {.number_value = {.type = NUMBER_BOOL, .bool_value = true}},
+          .info = info};
     }
     if (strcmp(str, "false") == 0) {
-      return (struct token){.type = TOKEN_NUM,
-                            .value = {.number_value = {.type = NUMBER_BOOL,
-                                                       .bool_value = false}}};
+      return (struct token){
+          .type = TOKEN_NUM,
+          .value = {.number_value = {.type = NUMBER_BOOL, .bool_value = false}},
+          .info = info};
     }
     if (strcmp(str, "func") == 0) {
-      return (struct token){.type = TOKEN_FUNC};
+      return (struct token){.type = TOKEN_FUNC, .info = info};
     }
     if (strcmp(str, "return") == 0) {
-      return (struct token){.type = TOKEN_RETURN};
+      return (struct token){.type = TOKEN_RETURN, .info = info};
     }
     if (strcmp(str, "if") == 0) {
-      return (struct token){.type = TOKEN_IF};
+      return (struct token){.type = TOKEN_IF, .info = info};
     }
     if (strcmp(str, "else") == 0) {
-      return (struct token){.type = TOKEN_ELSE};
+      return (struct token){.type = TOKEN_ELSE, .info = info};
     }
     if (strcmp(str, "while") == 0) {
-      return (struct token){.type = TOKEN_WHILE};
+      return (struct token){.type = TOKEN_WHILE, .info = info};
     }
 
     if (strcmp(str, "include") == 0) {
-      return (struct token){.type = TOKEN_INCLUDE};
+      return (struct token){.type = TOKEN_INCLUDE, .info = info};
     }
 
     if (strcmp(str, "null") == 0) {
-      return (struct token){.type = TOKEN_NULL};
+      return (struct token){.type = TOKEN_NULL, .info = info};
     }
 
     if (strcmp(str, "typedef") == 0) {
-      return (struct token){.type = TOKEN_TYPE_DEF};
+      return (struct token){.type = TOKEN_TYPE_DEF, .info = info};
     }
 
     if (strcmp(str, "new") == 0) {
-      return (struct token){.type = TOKEN_NEW};
+      return (struct token){.type = TOKEN_NEW, .info = info};
     }
 
     if (strcmp(str, "this") == 0) {
-      return (struct token){.type = TOKEN_THIS};
+      return (struct token){.type = TOKEN_THIS, .info = info};
     }
 
-    return (struct token){.type = TOKEN_KEYWORD, .value = {.symbol_index = si}};
+    return (struct token){
+        .type = TOKEN_KEYWORD, .value = {.symbol_index = si}, .info = info};
   }
-  return (struct token){.type = TOKEN_ID, .value = {.symbol_index = si}};
+  return (struct token){
+      .type = TOKEN_ID, .value = {.symbol_index = si}, .info = info};
 }
 
 struct token scanner_number(struct scanner *s) {
@@ -406,6 +422,7 @@ struct token scanner_number(struct scanner *s) {
     index++;
     size++;
   }
+  struct token_info info = {.col = s->col, .row = s->row};
   if (!is_float) {
     unsigned int value = 0;
     unsigned int digital = 1;
@@ -416,17 +433,21 @@ struct token scanner_number(struct scanner *s) {
       patch += 1;
     }
     s->index += size;
+    s->col += size;
     return (struct token){
         .type = TOKEN_NUM,
         .value = {.number_value =
-                      (struct number){.type = NUMBER_INT, .int_value = value}}};
+                      (struct number){.type = NUMBER_INT, .int_value = value}},
+        .info = info};
   } else {
     double float_value = strtod(s->source->content + s->index, NULL);
     s->index += size;
+    s->col += size;
     return (struct token){
         .type = TOKEN_NUM,
         .value = {.number_value = (struct number){.type = NUMBER_FLOAT,
-                                                  .float_value = float_value}}};
+                                                  .float_value = float_value}},
+        .info = info};
   }
 }
 
@@ -444,8 +465,11 @@ struct token scanner_string(struct scanner *s) {
 
   unsigned int si =
       s->symbol->insert(s->symbol, s->source->content + s->index, size);
+  struct token_info info = {.col = s->col, .row = s->row};
   s->index = s->index + size + 1; // +1 to skip '"'
-  return (struct token){.type = TOKEN_STRING, .value = {.symbol_index = si}};
+  s->col += size + 1;
+  return (struct token){
+      .type = TOKEN_STRING, .value = {.symbol_index = si}, .info = info};
 }
 
 void single_comment_consumer(struct scanner *s) {
@@ -453,6 +477,8 @@ void single_comment_consumer(struct scanner *s) {
   while (first < s->source->size) {
     if (s->source->content[first] == '\n') {
       s->index = first + 1;
+      s->col = 0;
+      s->row += 1;
       return;
     }
     first += 1;
@@ -467,6 +493,11 @@ void multi_comment_consumer(struct scanner *s) {
       s->index = second + 1;
       return;
     }
+    if (s->source->content[first] == '\n') {
+      s->col = 0;
+      s->row += 1;
+    }
+    s->col += 1;
     first += 1;
     second = first + 1;
   }
@@ -489,6 +520,7 @@ void comment_consumer(struct scanner *s) {
 struct token scanner_opcode(struct scanner *s) {
   struct token t = {.type = TOKEN_UNKNOWN};
   char next = s->source->content[s->index + 1];
+  int start = s->index;
   switch (s->source->content[s->index]) {
   case '+':
     t = (struct token){.type = TOKEN_ADD};
@@ -592,15 +624,22 @@ struct token scanner_opcode(struct scanner *s) {
     return t;
   }
   s->index += 1;
+  t.info = (struct token_info){.col = s->col, .row = s->row};
+  s->col += s->index - start;
   return t;
 }
 
 struct token next_token(struct scanner *s) {
   if (s->index >= s->source->size) {
-    return (struct token){.type = TOKEN_EOF};
+    return (struct token){.type = TOKEN_EOF,
+                          .info = {.col = s->col, .row = s->row}};
   }
   // skip white space
   while (is_white_space(s->source->content[s->index])) {
+    if (s->source->content[s->index] == '\n') {
+      s->col = 0;
+      s->row += 1;
+    }
     s->index += 1;
   }
 
@@ -612,9 +651,11 @@ struct token next_token(struct scanner *s) {
   } else if (is_opcode(c)) {
     return scanner_opcode(s);
   } else if (c == '\0') {
-    return (struct token){.type = TOKEN_EOF};
+    return (struct token){.type = TOKEN_EOF,
+                          .info = {.col = s->col, .row = s->row}};
   } else {
-    return (struct token){.type = TOKEN_UNKNOWN};
+    return (struct token){.type = TOKEN_UNKNOWN,
+                          .info = {.col = s->col, .row = s->row}};
   }
 }
 
