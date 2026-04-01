@@ -1864,13 +1864,15 @@ struct syntax_expr *parser_arraylist(struct Parser *parser) {
       (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
   expr->type = EXPR_ARRAY;
   expr->data.array_expr.elements = new_vec();
-  do {
-    if (parser->sc->cur_token.type == TOKEN_COMMA) {
-      scanner_run(parser->sc);
-    }
-    expr->data.array_expr.elements->push(expr->data.array_expr.elements,
-                                         parser_expr(parser));
-  } while (parser->sc->cur_token.type == TOKEN_COMMA);
+  if (parser->sc->cur_token.type != TOKEN_RIGHT_BRACKET) {
+    do {
+      if (parser->sc->cur_token.type == TOKEN_COMMA) {
+        scanner_run(parser->sc);
+      }
+      expr->data.array_expr.elements->push(expr->data.array_expr.elements,
+                                           parser_expr(parser));
+    } while (parser->sc->cur_token.type == TOKEN_COMMA);
+  }
   expected_token_type_and_run(parser->sc, TOKEN_RIGHT_BRACKET);
   return expr;
 }
@@ -2533,6 +2535,7 @@ typedef enum {
   VAL_FLOAT,
   VAL_STR_INDEX,
   VAL_BOOL,
+  VAL_CHAR,
   VAL_REF,
   VAL_OFFSET,
   VAL_REGISTER,
@@ -2553,6 +2556,7 @@ typedef struct {
     float f_val;
     bool b_val;
     void *ptr;
+    char c_val;
   } data;
 } ZValue;
 
@@ -2747,6 +2751,7 @@ ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
   case VAL_BOOL:
   case VAL_FLOAT:
   case VAL_INT:
+  case VAL_CHAR:
   case VAL_NULL:
   case VAL_OFFSET:
   case VAL_STR_INDEX: {
@@ -2865,6 +2870,7 @@ void deallocator_data(MemoryManager *manager, ZValue *value) {
   case VAL_NULL:
   case VAL_STR_INDEX:
   case VAL_REGISTER:
+  case VAL_CHAR:
   case VAL_OFFSET: {
     free(value);
     memory_deallocator(manager, sizeof(ZValue));
@@ -3284,9 +3290,9 @@ ZValue *inst_run_op(VM *vm, TOKEN_TYPE type, ZValue *left, ZValue *right) {
     right = (ZValue *)(right->data.ptr);
   }
   assert(left->type == VAL_INT || left->type == VAL_FLOAT ||
-         left->type == VAL_BOOL);
+         left->type == VAL_BOOL || left->type == VAL_CHAR);
   assert(right->type == VAL_INT || right->type == VAL_FLOAT ||
-         right->type == VAL_BOOL);
+         right->type == VAL_BOOL || left->type == VAL_CHAR);
   bool is_int = false;
   if (left->type == VAL_INT || right->type == VAL_INT) {
     is_int = true;
@@ -3300,14 +3306,18 @@ ZValue *inst_run_op(VM *vm, TOKEN_TYPE type, ZValue *left, ZValue *right) {
     l = left->data.f_val;
   } else if (left->type == VAL_BOOL) {
     l = left->data.b_val ? 1 : 0;
+  } else if (left->type == VAL_CHAR) {
+    l = left->data.c_val;
   }
 
   if (right->type == VAL_INT) {
     r = right->data.i_val;
   } else if (right->type == VAL_FLOAT) {
     r = right->data.f_val;
-  } else if (left->type == VAL_BOOL) {
-    r = left->data.b_val ? 1 : 0;
+  } else if (right->type == VAL_BOOL) {
+    r = right->data.b_val ? 1 : 0;
+  } else if (right->type == VAL_CHAR) {
+    r = right->data.c_val;
   }
   float s = 0;
   switch (type) {
@@ -3368,7 +3378,10 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
     return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
   } else if (v->type == VAL_NULL) {
     return 0;
-  } else if (v->type == VAL_REF) {
+  } else if (v->type == VAL_CHAR) {
+    return v->data.c_val;
+  }
+  if (v->type == VAL_REF) {
     return (int)v->data.ptr;
   } else {
     assert(false);
@@ -3436,8 +3449,8 @@ void LOGIC_INST_RUN(VM *vm, ZValue *value, INSTRUCTION_CODE code) {
       re->data.f_val = v;
     } break;
     case VAL_BOOL: {
-      re = allocator_data(vm->mm, VAL_FLOAT, 0, NULL);
-      re->data.b_val = v != 0;
+      re = allocator_data(vm->mm, VAL_BOOL, 0, NULL);
+      re->data.b_val = v == 0;
     } break;
     default:
       assert(false);
@@ -3507,6 +3520,9 @@ void print_data(VM *vm, ZValue *v) {
     } else {
       printf("false");
     }
+  } break;
+  case VAL_CHAR: {
+    printf("%s", v->data.c_val);
   } break;
   case VAL_REF:
     print_ref(vm, v);
@@ -3850,6 +3866,8 @@ bool is_true(VM *vm, ZValue *value) {
     return value->data.f_val;
   case VAL_INT:
     return value->data.i_val;
+  case VAL_CHAR:
+    return value->data.c_val;
   case VAL_NULL:
     return false;
   default:
@@ -3931,6 +3949,7 @@ ZValue *copy(VM *vm, ZValue *src) {
   case VAL_INT:
   case VAL_STR_INDEX:
   case VAL_BOOL:
+  case VAL_CHAR:
   case VAL_FLOAT:
   case VAL_NULL:
   case VAL_OFFSET:
