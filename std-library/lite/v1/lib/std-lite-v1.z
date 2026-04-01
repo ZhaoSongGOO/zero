@@ -4,7 +4,7 @@
  * Description: Contains fundamental utility functions for value manipulation
  * and basic arithmetic operations.
  */
- 
+
 typedef __bool_ref {
 value:
   bool;
@@ -37,6 +37,28 @@ func __int_hash() { return this.value; }
 
 func Int(a) {
   return new __int_ref{value = a, __str__ = __int_print, __hash__ = __int_hash};
+}
+
+typedef __string_ref {
+value:
+  string;
+__str__:
+  object;
+len:
+  object;
+substr:
+  object;
+};
+
+func __string_print() { __print(this.value); }
+
+func __string_len() { return __len(this.value); }
+
+func __string_substr(start, size) { return __substr(this.value, start, size); }
+
+func String(s) {
+  return new __string_ref{value = s, __str__ = __string_print,
+                          len = __string_len, substr = __string_substr};
 }
 
 typedef __list_node {

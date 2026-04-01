@@ -1,0 +1,118 @@
+__init__:
+main:
+  PUSH_S Hello
+  CALL String
+  FREE 1
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S len
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  STORE #2
+  LOAD #2
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 2
+  PUSH_D 1
+  NEGATE
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 2
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 3
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 4
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 5
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 6
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 1
+  NEGATE
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1

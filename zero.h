@@ -2681,6 +2681,7 @@ ZString *allocator_string_data(MemoryManager *manager,
   ZString *s = (ZString *)malloc(sizeof(ZString));
   if (params->str.str_length != 0) {
     s->c_str = (char *)malloc(sizeof(char) * params->str.str_length);
+    *(s->c_str + params->str.str_length - 1) = '\0';
   } else {
     s->c_str = NULL;
   }
@@ -3045,6 +3046,10 @@ void init_builtin(VM *vm) {
   map_insert(vm->symbols, "__read", build_builtin_fuction(vm, "__read"));
 
   map_insert(vm->symbols, "__close", build_builtin_fuction(vm, "__close"));
+
+  map_insert(vm->symbols, "__len", build_builtin_fuction(vm, "__len"));
+
+  map_insert(vm->symbols, "__substr", build_builtin_fuction(vm, "__substr"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3583,7 +3588,7 @@ void print_ref(VM *vm, ZValue *v) {
     print_object(vm, v);
     break;
   case REF_VAL_STR:
-    printf("%s\n", d->data.str->c_str);
+    printf("%s", d->data.str->c_str);
     break;
   case REF_VAL_FUNC: {
     ZFunction *f = d->data.func;
@@ -3604,6 +3609,8 @@ void print(VM *vm) {
   __print(vm);
   printf("\n");
 }
+
+ZValue *object_prop_get(VM *vm, ZObject *raw_obj, const char *key);
 
 /*
 1:v1
@@ -3636,6 +3643,16 @@ void new_array(VM *vm) {
 5:2  <---- sp
 */
 
+ZValue *str_index_to_string_ref(VM *vm, ZValue *value) {
+  assert(value->type == VAL_STR_INDEX);
+  const char *vs = vm->cvalues->get(vm->cvalues, value->data.i_val);
+  ZValue *result =
+      allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                     &(AllocatorParams){.str.str_length = strlen(vs) + 1});
+  memcpy(((ZRefValue *)result->data.ptr)->data.str->c_str, vs, strlen(vs) + 1);
+  return result;
+}
+
 void new_object(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
@@ -3649,7 +3666,11 @@ void new_object(VM *vm) {
     assert(key->type == VAL_STR_INDEX);
     ZValue *value = vm->stacks[stack_base + i * 2 + 1];
     obj->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
-    obj->entries[i].value = copy(vm, value);
+    if (value->type == VAL_STR_INDEX) {
+      obj->entries[i].value = str_index_to_string_ref(vm, value);
+    } else {
+      obj->entries[i].value = copy(vm, value);
+    }
   }
   ZValue *i = allocator_data(vm->mm, VAL_REF, 0,
                              &(AllocatorParams){.ref.is_shell = true});
@@ -3665,6 +3686,50 @@ void zero_hash(VM *vm) {
   ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
   v->data.i_val = (int)ref;
   map_insert(vm->registers, "ei", v);
+}
+
+void zero_string_len(VM *vm) {
+  ZValue *str = vm->stacks[vm->sp];
+  assert(str->type == VAL_REF);
+  ZRefValue *ref = (ZRefValue *)str->data.ptr;
+  assert(ref->type == REF_VAL_STR);
+  ZValue *ret = allocator_data(vm->mm, VAL_INT, 0, NULL);
+  ret->data.i_val = strlen(ref->data.str->c_str);
+  map_insert(vm->registers, "ei", ret);
+}
+
+void zero_string_substr(VM *vm) {
+  ZValue *str = vm->stacks[vm->sp];
+  ZValue *start = vm->stacks[vm->sp - 1];
+  ZValue *size = vm->stacks[vm->sp - 2];
+  assert(str->type == VAL_REF);
+  assert(start->type == VAL_INT);
+  assert(size->type == VAL_INT);
+  ZRefValue *ref = (ZRefValue *)str->data.ptr;
+  assert(ref->type == REF_VAL_STR);
+  size_t raw_size = strlen(ref->data.str->c_str);
+  int start_index = start->data.i_val;
+  int size_value = size->data.i_val;
+  if (start_index < 0) {
+    start_index = 0;
+  }
+  if (start_index >= raw_size) {
+    map_insert(vm->registers, "ei",
+               allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                              &(AllocatorParams){.str.str_length = 0}));
+    return;
+  }
+  if ((start_index + size_value - 1) >= raw_size) {
+    size_value = raw_size - start_index;
+  }
+  ZValue *ret =
+      allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                     &(AllocatorParams){.str.str_length = size_value + 1});
+
+  memcpy(((ZRefValue *)ret->data.ptr)->data.str->c_str,
+         ref->data.str->c_str + start_index, size_value);
+
+  map_insert(vm->registers, "ei", ret);
 }
 
 void zero_open(VM *vm) {
@@ -3768,6 +3833,10 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     zero_close(vm);
   } else if (strcmp(func->name, "__hash__") == 0) {
     zero_hash(vm);
+  } else if (strcmp(func->name, "__len") == 0) {
+    zero_string_len(vm);
+  } else if (strcmp(func->name, "__substr") == 0) {
+    zero_string_substr(vm);
   } else {
     assert(false);
   }
@@ -3848,6 +3917,8 @@ ZRefValue *copy_ref(VM *vm, ZRefValue *src) {
     break;
   }
 }
+
+ZValue *str_index_to_ref_sting(VM *vm, ZValue *src) {}
 
 ZValue *copy(VM *vm, ZValue *src) {
   switch (src->type) {
