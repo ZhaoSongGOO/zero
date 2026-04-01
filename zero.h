@@ -4016,7 +4016,7 @@ void CALL_INST_RUN(VM *vm, ZValue *value) {
   runnable->ctx = new_context();
   runnable->func = func;
   bool vm_stack_is_empty = vm->sp < 0;
-  runnable->ctx->bp = vm_stack_is_empty ? 0 : vm->sp;
+  runnable->ctx->bp = vm_stack_is_empty ? -1 : vm->sp;
   runnable->ctx->parent = vm->cur_context;
   vm->cur_context = runnable->ctx;
   if (func->is_builtin) {
