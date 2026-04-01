@@ -2566,9 +2566,10 @@ typedef struct {
   ZValue *value;
 } ZPair;
 
-typedef struct {
+typedef struct zero_object {
   int count;
   ZPair *entries;
+  struct zero_object *prototype;
 } ZObject;
 
 typedef struct {
@@ -2620,6 +2621,31 @@ typedef struct zero_memory_allocator_params {
   } ref;
 } AllocatorParams;
 
+ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
+                       AllocatorParams *params);
+
+#define PROTOTYPE_PROP_COUNT 1
+
+ZObject *allocator_object_prototype(MemoryManager *manager, ZValue *t,
+                                    AllocatorParams *params) {
+  ZObject *prototype = (ZObject *)malloc(sizeof(ZObject));
+  // init prototype count
+  {
+    prototype->count = PROTOTYPE_PROP_COUNT;
+  }
+  // init prototype item
+  {
+    prototype->entries = (ZPair *)malloc(sizeof(ZPair) * prototype->count);
+    prototype->entries[0].key = "__hash__";
+    prototype->entries[0].value = allocator_data(manager, VAL_INT, 0, NULL);
+    prototype->entries[0].value->data.i_val = (int)t;
+  }
+
+  prototype->prototype = NULL;
+  memory_allocator(manager, sizeof(ZObject) + sizeof(ZPair) * prototype->count);
+  return prototype;
+}
+
 ZObject *allocator_object_data(MemoryManager *manager,
                                AllocatorParams *params) {
   ZObject *obj = (ZObject *)malloc(sizeof(ZObject));
@@ -2629,6 +2655,7 @@ ZObject *allocator_object_data(MemoryManager *manager,
   } else {
     obj->entries = NULL;
   }
+  obj->prototype = allocator_object_prototype(manager, obj, params);
 
   memory_allocator(manager, sizeof(ZObject) + sizeof(ZPair) * obj->count);
   return obj;
@@ -2783,6 +2810,7 @@ void deallocator_obj_data(MemoryManager *manager, ZObject *obj) {
     memory_deallocator(manager, sizeof(ZPair));
     free(obj->entries);
   }
+  deallocator_data(manager, obj->prototype);
   free(obj);
   memory_deallocator(manager, sizeof(ZObject));
 }
@@ -3918,15 +3946,7 @@ void COPY_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[++vm->sp] = target;
 }
 
-void GET_INST_RUN(VM *vm, ZValue *value) {
-  ZValue *obj_ref = vm->stacks[vm->sp - 1];
-  ZValue *prop = vm->stacks[vm->sp];
-  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
-  assert(obj_ref->type == VAL_REF);
-  assert(prop->type = VAL_STR_INDEX);
-  ZRefValue *obj = (ZRefValue *)obj_ref->data.ptr;
-  assert(obj->type == REF_VAL_OBJ);
-  ZObject *raw_obj = obj->data.obj;
+ZValue *object_prop_get(VM *vm, ZObject *raw_obj, const char *key) {
   for (int i = 0; i < raw_obj->count; i++) {
     if (strcmp(raw_obj->entries[i].key, key) == 0) {
       ZValue *src = raw_obj->entries[i].value;
@@ -3940,11 +3960,32 @@ void GET_INST_RUN(VM *vm, ZValue *value) {
         target = allocator_data(vm->mm, src->type, 0, NULL);
         target->data = src->data;
       }
-      vm->stacks[--(vm->sp)] = target;
-      return;
+      return target;
     }
   }
-  assert(false);
+  return NULL;
+}
+
+void GET_INST_RUN(VM *vm, ZValue *value) {
+  ZValue *obj_ref = vm->stacks[vm->sp - 1];
+  ZValue *prop = vm->stacks[vm->sp];
+  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
+  assert(obj_ref->type == VAL_REF);
+  assert(prop->type = VAL_STR_INDEX);
+  ZRefValue *obj = (ZRefValue *)obj_ref->data.ptr;
+  assert(obj->type == REF_VAL_OBJ);
+  ZObject *raw_obj = obj->data.obj;
+  ZObject *re = object_prop_get(vm, raw_obj, key);
+  deallocator_data(vm->mm, obj_ref);
+  deallocator_data(vm->mm, prop);
+  if (re == NULL) {
+    re = object_prop_get(vm, raw_obj->prototype, key);
+  }
+  if (re != NULL) {
+    vm->stacks[--(vm->sp)] = re;
+  } else {
+    assert(false);
+  }
 }
 
 void CALL_INST_RUN(VM *vm, ZValue *value) {
