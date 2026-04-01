@@ -1,0 +1,39 @@
+__init__:
+main:
+  PUSH_D 1
+  CALL Int
+  FREE 1
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  COPY
+  PUSH_S __hash__
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  STORE #2
+  LOAD #1
+  COPY
+  PUSH_S __hash__
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  STORE #3
+  LOAD #1
+  STORE #4
+  LOAD #2
+  LOAD #3
+  E
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #4
+  LOAD #1
+  E
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1

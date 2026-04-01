@@ -1,0 +1,9 @@
+include("std");
+func main(){
+    var i = Int(1);
+    var h = i.__hash__();
+    var x = i.__hash__();
+    var u = i;
+    print(h == x);
+    print(u == i);
+}

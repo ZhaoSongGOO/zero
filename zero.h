@@ -2623,7 +2623,7 @@ typedef struct zero_memory_allocator_params {
 
 ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
                        AllocatorParams *params);
-
+ZFunction *allocator_func_data(MemoryManager *manager, AllocatorParams *params);
 #define PROTOTYPE_PROP_COUNT 1
 
 ZObject *allocator_object_prototype(MemoryManager *manager, ZValue *t,
@@ -2637,8 +2637,11 @@ ZObject *allocator_object_prototype(MemoryManager *manager, ZValue *t,
   {
     prototype->entries = (ZPair *)malloc(sizeof(ZPair) * prototype->count);
     prototype->entries[0].key = "__hash__";
-    prototype->entries[0].value = allocator_data(manager, VAL_INT, 0, NULL);
-    prototype->entries[0].value->data.i_val = (int)t;
+    ZValue *v = allocator_data(manager, VAL_REF, REF_VAL_FUNC, NULL);
+    prototype->entries[0].value = v;
+    ZRefValue *ref = (ZRefValue *)v->data.ptr;
+    ref->data.func->is_builtin = true;
+    ref->data.func->name = "__hash__";
   }
 
   prototype->prototype = NULL;
@@ -3654,6 +3657,16 @@ void new_object(VM *vm) {
   map_insert(vm->registers, "ei", i);
 }
 
+void zero_hash(VM *vm) {
+  ZValue *this = vm->stacks[vm->sp - 1];
+  assert(this->type == VAL_REF);
+  ZRefValue *ref = (ZRefValue *)this->data.ptr;
+  assert(ref->type == REF_VAL_OBJ);
+  ZValue *v = allocator_data(vm->mm, VAL_INT, 0, NULL);
+  v->data.i_val = (int)ref;
+  map_insert(vm->registers, "ei", v);
+}
+
 void zero_open(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   assert(v->type == VAL_STR_INDEX);
@@ -3753,6 +3766,8 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     zero_read(vm);
   } else if (strcmp(func->name, "__close") == 0) {
     zero_close(vm);
+  } else if (strcmp(func->name, "__hash__") == 0) {
+    zero_hash(vm);
   } else {
     assert(false);
   }
