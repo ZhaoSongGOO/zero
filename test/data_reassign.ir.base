@@ -31,7 +31,7 @@ main:
   PUSH_S name
   PUSH_S lily
   PUSH_D 1
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 3
   LOAD [ei]
   ASSIGN

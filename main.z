@@ -1,10 +1,5 @@
 include("std-library/lite/v1/lib/std-lite-v1");
 func main() {
   var s = List();
-  s.push(Int(12));
-  print(s);
-  print(s.get);
-  print(s.get(0));
-  print(s.get(0).value);
-  print(s.get(0).next);
+  print(s.__hash__());
 }

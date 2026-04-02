@@ -1,3 +1,4 @@
+include("std");
 func _show() { print(this.data); }
 
 func _add() { this.data = this.data + 1; }

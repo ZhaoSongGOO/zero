@@ -3,26 +3,26 @@ main:
   PUSH_S __data__
   PUSH_D 1
   PUSH_D 1
-  CALL NEW_ARRAY
+  CALL native_new_array
   FREE 2
   LOAD [ei]
   PUSH_S count
   PUSH_D 1
   PUSH_D 2
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 5
   LOAD [ei]
   STORE #1
   PUSH_S __data__
   PUSH_D 2
   PUSH_D 1
-  CALL NEW_ARRAY
+  CALL native_new_array
   FREE 2
   LOAD [ei]
   PUSH_S count
   PUSH_D 1
   PUSH_D 2
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 5
   LOAD [ei]
   STORE #2
@@ -90,7 +90,7 @@ main:
   PUSH_S name
   PUSH_S mike
   PUSH_D 1
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 3
   LOAD [ei]
   ASSIGN
@@ -99,7 +99,7 @@ main:
   PUSH_S age
   PUSH_D 12
   PUSH_D 1
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 3
   LOAD [ei]
   ASSIGN

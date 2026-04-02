@@ -12,13 +12,13 @@ main:
   PUSH_D 3
   PUSH_S Hello
   PUSH_D 4
-  CALL NEW_ARRAY
+  CALL native_new_array
   FREE 5
   LOAD [ei]
   PUSH_S count
   PUSH_D 4
   PUSH_D 2
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 5
   LOAD [ei]
   STORE #1

@@ -5,6 +5,8 @@
  * and basic arithmetic operations.
  */
 
+func print(msg) { native_println(msg); }
+
 typedef __bool_ref {
 value:
   bool;
@@ -14,7 +16,7 @@ __hash__:
   object;
 };
 
-func __bool_print() { __print(this.value); }
+func __bool_print() { native_print(this.value); }
 
 func __bool_hash() { return this.value; }
 
@@ -31,7 +33,7 @@ __str__:
 __hash__:
   object;
 };
-func __int_print() { __print(this.value); }
+func __int_print() { native_print(this.value); }
 
 func __int_hash() { return this.value; }
 
@@ -50,11 +52,13 @@ substr:
   object;
 };
 
-func __string_print() { __print(this.value); }
+func __string_print() { native_print(this.value); }
 
-func __string_len() { return __len(this.value); }
+func __string_len() { return native_string_len(this.value); }
 
-func __string_substr(start, size) { return __substr(this.value, start, size); }
+func __string_substr(start, size) {
+  return native_string_substr(this.value, start, size);
+}
 
 func String(s) {
   return new __string_ref{value = s, __str__ = __string_print,
@@ -272,11 +276,11 @@ fd:
 };
 
 func open(p) {
-  var f = __open(p);
+  var f = native_open(p);
   return new File{fd = f};
 }
 
-func read(file) { return __read(file); }
+func read(file) { return native_read(file); }
 
 // TODO(To be implemented)
-func close(file) { __close(file); }
+func close(file) { native_close(file); }

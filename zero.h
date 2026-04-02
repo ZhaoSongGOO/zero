@@ -2302,7 +2302,7 @@ void expression_new_visitor(struct syntax_expr *expr) {
               expression_new_visitor_helper, expr);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d",
                    expr->data.new_expr.mete_data->segments->count);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL native_new_object");
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d",
                    expr->data.new_expr.mete_data->segments->count * 2 + 1);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
@@ -2501,13 +2501,13 @@ void expression_array_visitor(struct syntax_expr *expr) {
     expression_visitor(elements->get(elements, i));
   }
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", elements->count);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_ARRAY");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL native_new_array");
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d", elements->count + 1);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S count");
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", elements->count);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D 2");
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL native_new_object");
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d", 2 * 2 + 1);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
@@ -2520,7 +2520,7 @@ void expression_object_visitor(struct syntax_expr *expr) {
     expression_visitor(kv->value);
   }
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_D %d", pairs->count);
-  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL NEW_OBJECT");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "CALL native_new_object");
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "FREE %d", pairs->count * 2 + 1);
   INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD [ei]");
 }
@@ -3036,21 +3036,29 @@ ZValue *build_builtin_fuction(VM *vm, const char *name) {
 }
 
 void init_builtin(VM *vm) {
-  map_insert(vm->symbols, "print", build_builtin_fuction(vm, "print"));
-  map_insert(vm->symbols, "NEW_ARRAY", build_builtin_fuction(vm, "NEW_ARRAY"));
-  map_insert(vm->symbols, "NEW_OBJECT",
-             build_builtin_fuction(vm, "NEW_OBJECT"));
-  map_insert(vm->symbols, "__print", build_builtin_fuction(vm, "__print"));
+  map_insert(vm->symbols, "native_println",
+             build_builtin_fuction(vm, "native_println"));
+  map_insert(vm->symbols, "native_new_array",
+             build_builtin_fuction(vm, "native_new_array"));
+  map_insert(vm->symbols, "native_new_object",
+             build_builtin_fuction(vm, "native_new_object"));
+  map_insert(vm->symbols, "native_print",
+             build_builtin_fuction(vm, "native_print"));
 
-  map_insert(vm->symbols, "__open", build_builtin_fuction(vm, "__open"));
+  map_insert(vm->symbols, "native_open",
+             build_builtin_fuction(vm, "native_open"));
 
-  map_insert(vm->symbols, "__read", build_builtin_fuction(vm, "__read"));
+  map_insert(vm->symbols, "native_read",
+             build_builtin_fuction(vm, "native_read"));
 
-  map_insert(vm->symbols, "__close", build_builtin_fuction(vm, "__close"));
+  map_insert(vm->symbols, "native_close",
+             build_builtin_fuction(vm, "native_close"));
 
-  map_insert(vm->symbols, "__len", build_builtin_fuction(vm, "__len"));
+  map_insert(vm->symbols, "native_string_len",
+             build_builtin_fuction(vm, "native_string_len"));
 
-  map_insert(vm->symbols, "__substr", build_builtin_fuction(vm, "__substr"));
+  map_insert(vm->symbols, "native_string_substr",
+             build_builtin_fuction(vm, "native_string_substr"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3611,13 +3619,13 @@ void print_ref(VM *vm, ZValue *v) {
   }
 }
 
-void __print(VM *vm) {
+void native_print(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   print_data(vm, v);
 }
 
-void print(VM *vm) {
-  __print(vm);
+void native_println(VM *vm) {
+  native_print(vm);
   printf("\n");
 }
 
@@ -3629,7 +3637,7 @@ ZValue *object_prop_get(VM *vm, ZObject *raw_obj, const char *key);
 3:2  <---- sp
 */
 
-void new_array(VM *vm) {
+void native_new_array(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
   ZRefValue *data = allocator_ref_data(
@@ -3664,7 +3672,7 @@ ZValue *str_index_to_string_ref(VM *vm, ZValue *value) {
   return result;
 }
 
-void new_object(VM *vm) {
+void native_new_object(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
   ZRefValue *data =
@@ -3699,7 +3707,7 @@ void zero_hash(VM *vm) {
   map_insert(vm->registers, "ei", v);
 }
 
-void zero_string_len(VM *vm) {
+void native_string_len(VM *vm) {
   ZValue *str = vm->stacks[vm->sp];
   assert(str->type == VAL_REF);
   ZRefValue *ref = (ZRefValue *)str->data.ptr;
@@ -3709,7 +3717,7 @@ void zero_string_len(VM *vm) {
   map_insert(vm->registers, "ei", ret);
 }
 
-void zero_string_substr(VM *vm) {
+void native_string_substr(VM *vm) {
   ZValue *str = vm->stacks[vm->sp];
   ZValue *start = vm->stacks[vm->sp - 1];
   ZValue *size = vm->stacks[vm->sp - 2];
@@ -3743,7 +3751,7 @@ void zero_string_substr(VM *vm) {
   map_insert(vm->registers, "ei", ret);
 }
 
-void zero_open(VM *vm) {
+void native_open(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   assert(v->type == VAL_STR_INDEX);
   const char *file_name = vm->cvalues->get(vm->cvalues, v->data.i_val);
@@ -3762,7 +3770,7 @@ void zero_open(VM *vm) {
   map_insert(vm->registers, "ei", f);
 }
 
-void zero_read(VM *vm) {
+void native_read(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   if (v->type == VAL_NULL) {
     map_insert(vm->registers, "ei",
@@ -3824,30 +3832,30 @@ void zero_read(VM *vm) {
 }
 
 // TODO(To be implemented)
-void zero_close(VM *vm) {}
+void native_close(VM *vm) {}
 
 void call_builtin_function(VM *vm, ZFunction *func) {
   assert(func->is_builtin);
-  if (strcmp(func->name, "print") == 0) {
-    print(vm);
-  } else if (strcmp(func->name, "NEW_ARRAY") == 0) {
-    new_array(vm);
-  } else if (strcmp(func->name, "NEW_OBJECT") == 0) {
-    new_object(vm);
-  } else if (strcmp(func->name, "__print") == 0) {
-    __print(vm);
-  } else if (strcmp(func->name, "__open") == 0) {
-    zero_open(vm);
-  } else if (strcmp(func->name, "__read") == 0) {
-    zero_read(vm);
-  } else if (strcmp(func->name, "__close") == 0) {
-    zero_close(vm);
+  if (strcmp(func->name, "native_println") == 0) {
+    native_println(vm);
+  } else if (strcmp(func->name, "native_new_array") == 0) {
+    native_new_array(vm);
+  } else if (strcmp(func->name, "native_new_object") == 0) {
+    native_new_object(vm);
+  } else if (strcmp(func->name, "native_print") == 0) {
+    native_print(vm);
+  } else if (strcmp(func->name, "native_open") == 0) {
+    native_open(vm);
+  } else if (strcmp(func->name, "native_read") == 0) {
+    native_read(vm);
+  } else if (strcmp(func->name, "native_close") == 0) {
+    native_close(vm);
   } else if (strcmp(func->name, "__hash__") == 0) {
     zero_hash(vm);
-  } else if (strcmp(func->name, "__len") == 0) {
-    zero_string_len(vm);
-  } else if (strcmp(func->name, "__substr") == 0) {
-    zero_string_substr(vm);
+  } else if (strcmp(func->name, "native_string_len") == 0) {
+    native_string_len(vm);
+  } else if (strcmp(func->name, "native_string_substr") == 0) {
+    native_string_substr(vm);
   } else {
     assert(false);
   }

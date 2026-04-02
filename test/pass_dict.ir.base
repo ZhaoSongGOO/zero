@@ -18,7 +18,7 @@ main:
   PUSH_S run
   LOAD .action
   PUSH_D 1
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 3
   LOAD [ei]
   STORE #1

@@ -1,3 +1,4 @@
+include("std");
 func assigna(x){
     x = 2;
 }

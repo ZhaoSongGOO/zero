@@ -1,3 +1,4 @@
+include("std");
 var a = 1;
 
 func action() { print(a); }

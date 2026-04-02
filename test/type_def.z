@@ -10,7 +10,7 @@ __str__:
 };
 
 func showCustom() {
-  __print("Custom age is ");
+  native_print("Custom age is ");
   print(this.age);
   if (this.next != null) {
     print("---call next start---");

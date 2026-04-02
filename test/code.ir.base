@@ -74,13 +74,13 @@ main:
   PUSH_D 3
   LOAD #1
   PUSH_D 4
-  CALL NEW_ARRAY
+  CALL native_new_array
   FREE 5
   LOAD [ei]
   PUSH_S count
   PUSH_D 4
   PUSH_D 2
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 5
   LOAD [ei]
   STORE #3
@@ -227,7 +227,7 @@ main:
   PUSH_S address
   PUSH_S abc
   PUSH_D 2
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 5
   LOAD [ei]
   STORE #11
@@ -305,7 +305,7 @@ main:
   PUSH_S run
   LOAD .action
   PUSH_D 1
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 3
   LOAD [ei]
   STORE #13
@@ -358,7 +358,7 @@ main:
   PUSH_S owner
   LOAD #13
   PUSH_D 1
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 3
   LOAD [ei]
   STORE #15

@@ -1,3 +1,4 @@
+include("std");
 func main(){
     var a = 10;
     while(a >= 0){

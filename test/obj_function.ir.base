@@ -27,7 +27,7 @@ new_number:
   LOAD ._show
   CHECK 5
   PUSH_D 3
-  CALL NEW_OBJECT
+  CALL native_new_object
   FREE 7
   LOAD [ei]
   STORE [ei]
