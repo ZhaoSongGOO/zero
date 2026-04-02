@@ -3378,14 +3378,11 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
   } else if (v->type == VAL_BOOL) {
     return v->data.b_val;
   } else if (v->type == VAL_REF) {
-    return get_number_value_from_zvalue(vm, (ZValue *)v->data.ptr);
+    return (int)v->data.ptr;
   } else if (v->type == VAL_NULL) {
     return 0;
   } else if (v->type == VAL_CHAR) {
     return v->data.c_val;
-  }
-  if (v->type == VAL_REF) {
-    return (int)v->data.ptr;
   } else {
     assert(false);
   }

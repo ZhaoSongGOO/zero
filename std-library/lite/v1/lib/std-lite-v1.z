@@ -50,11 +50,20 @@ len:
   object;
 substr:
   object;
+equal:
+  object;
 };
 
 func __string_print() { native_print(this.value); }
 
 func __string_len() { return native_string_len(this.value); }
+
+func __string_equal(other) {
+  if (this.len() != other.len()) {
+    return false;
+  }
+  // native_string_equal(this, other);
+}
 
 func __string_substr(start, size) {
   return native_string_substr(this.value, start, size);
@@ -62,7 +71,8 @@ func __string_substr(start, size) {
 
 func String(s) {
   return new __string_ref{value = s, __str__ = __string_print,
-                          len = __string_len, substr = __string_substr};
+                          len = __string_len, substr = __string_substr,
+                          equal = __string_equal};
 }
 
 typedef __list_node {
