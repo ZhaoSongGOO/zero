@@ -60,14 +60,16 @@ assignment = term { ( "+" | "-" ) term } ;
 term       = factor { ( "*" | "/" ) factor } ;
 
 # level 7
-factor     = [ "!" | "-" ] primary_call ; 
+factor     = [ "!" | "-" ] obj_access ; 
 
 # level 8
+
+obj_access = primary_call {"." primary_call}
+
+# level 9
 primary_call = primary { "(" [ arg_list ] ")" };
 
-primary    = obj_access | number | string | bool |array_list | object_list | null | "(" expression ")" ;
-
-obj_access = identifier {"." string}
+primary    = number | string | bool |array_list | object_list | null | "(" expression ")" ;
 
 arg_list   = expression { "," expression } ;
 

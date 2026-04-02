@@ -904,7 +904,6 @@ struct syntax_expr {
 
       bool source_in_stack;
       char *func_name;
-      struct syntax_expr *source;
       // struct syntax_expr **args;
       // uint8_t arg_count;
       struct Vec *args;
@@ -930,11 +929,12 @@ struct syntax_expr {
       bool is_from_top;     // if var defined from global.
       bool may_be_function; // {"a":f}, `f` may be a function.
       bool is_this;
+      bool is_in_access;
     } identifier_expr;
 
     struct {
       struct syntax_expr *obj;
-      struct Vec *props;
+      struct syntax_expr *prop;
     } access_expr;
 
     struct {
@@ -1155,6 +1155,7 @@ struct syntax_expr *parser_comparison(struct Parser *parser);
 struct syntax_expr *parser_assignment(struct Parser *parser);
 struct syntax_expr *parser_term(struct Parser *parser);
 struct syntax_expr *parser_factory(struct Parser *parser);
+struct syntax_expr *parser_access(struct Parser *parser);
 struct syntax_expr *parser_call(struct syntax_expr *caller,
                                 struct Parser *parser);
 struct syntax_expr *parser_primary_call(struct Parser *parser);
@@ -1641,17 +1642,37 @@ struct syntax_expr *parser_factory(struct Parser *parser) {
     is_unary = true;
     expected_token_type_and_run(parser->sc, parser->sc->cur_token.type);
   }
-  struct syntax_expr *factory = parser_primary_call(parser);
+  struct syntax_expr *access = parser_access(parser);
   if (is_unary) {
     struct syntax_expr *unary =
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
     unary->type = EXPR_UNARY;
     unary->data.binary_expr.op = n.type;
-    unary->data.binary_expr.right = factory;
+    unary->data.binary_expr.right = access;
     unary->data.binary_expr.left = NULL;
-    factory = unary;
+    access = unary;
   }
-  return factory;
+  return access;
+}
+
+struct syntax_expr *parser_access(struct Parser *parser) {
+  struct syntax_expr *primary_call = parser_primary_call(parser);
+  while (parser->sc->cur_token.type == TOKEN_ACCESS) {
+    expected_token_type_and_run(parser->sc, TOKEN_ACCESS);
+    struct syntax_expr *access =
+        (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
+    access->type = EXPR_ACCESS;
+    access->data.access_expr.obj = primary_call;
+    struct syntax_expr *prop = parser_primary_call(parser);
+    if (prop->type == EXPR_ID) {
+      prop->data.identifier_expr.is_in_access = true;
+    } else if (prop->type == EXPR_CALL) {
+      prop->data.call_expr.source_in_stack = true;
+    }
+    access->data.access_expr.prop = prop;
+    primary_call = access;
+  }
+  return primary_call;
 }
 
 struct syntax_expr *parser_primary_call(struct Parser *parser) {
@@ -1757,6 +1778,7 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
         (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
     id->type = EXPR_ID;
     id->data.identifier_expr.is_this = is_this;
+    id->data.identifier_expr.is_in_access = false;
     if (!is_this) {
       id->data.identifier_expr.may_be_function = false;
       id->data.identifier_expr.from_params = false;
@@ -1790,24 +1812,6 @@ struct syntax_expr *parser_primary(struct Parser *parser) {
 
     if (is_this) {
       id->data.identifier_expr.offset = parser->cur_scope->params->count;
-    }
-
-    if (parser->sc->cur_token.type == TOKEN_ACCESS) {
-      struct syntax_expr *access_expr =
-          (struct syntax_expr *)malloc(sizeof(struct syntax_expr));
-      access_expr->data.access_expr.obj = id;
-      access_expr->type = EXPR_ACCESS;
-      access_expr->data.access_expr.props = new_vec();
-      while (parser->sc->cur_token.type == TOKEN_ACCESS) {
-        expected_token_type_and_run(parser->sc, TOKEN_ACCESS);
-        struct token n = parser->sc->cur_token;
-        expected_token_type_and_run(parser->sc, TOKEN_ID);
-        access_expr->data.access_expr.props->push(
-            access_expr->data.access_expr.props,
-            parser->sc->symbol->get(parser->sc->symbol, n.value.symbol_index)
-                ->str);
-      }
-      return access_expr;
     }
     return id;
   }
@@ -1849,10 +1853,6 @@ struct syntax_expr *parser_call(struct syntax_expr *caller,
     } else {
       call->data.call_expr.var_index = -1;
     }
-
-  } else if (caller->type == EXPR_ACCESS) {
-    call->data.call_expr.source_in_stack = true;
-    call->data.call_expr.source = caller;
   }
   call->data.call_expr.args = args;
   return call;
@@ -2228,20 +2228,26 @@ void expression_visitor(struct syntax_expr *expr) {
       INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
                        expr->data.identifier_expr.offset + 1);
     } else {
-      if (expr->data.identifier_expr.may_be_function) {
-        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD .%s", // function name
+      if (expr->data.identifier_expr.is_in_access) {
+        INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", // function name
                          expr->data.identifier_expr.name);
       } else {
-        if (expr->data.identifier_expr.from_params) {
-          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
-                           expr->data.identifier_expr.offset);
+        if (expr->data.identifier_expr.may_be_function) {
+          INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD .%s", // function name
+                           expr->data.identifier_expr.name);
         } else {
-          if (expr->data.identifier_expr.is_from_top) {
-            INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
-                             expr->data.identifier_expr.var_index);
+          if (expr->data.identifier_expr.from_params) {
+            INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #-%d", // bp-%d
+                             expr->data.identifier_expr.offset);
           } else {
-            INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d",
-                             expr->data.identifier_expr.var_index + 1); // bp+d
+            if (expr->data.identifier_expr.is_from_top) {
+              INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD %d", // base+%d
+                               expr->data.identifier_expr.var_index);
+            } else {
+              INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "LOAD #%d",
+                               expr->data.identifier_expr.var_index +
+                                   1); // bp+d
+            }
           }
         }
       }
@@ -2305,28 +2311,17 @@ void expression_new_visitor(struct syntax_expr *expr) {
 void expression_access_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_ACCESS);
   expression_visitor(expr->data.access_expr.obj);
-  for (int i = 0; i < expr->data.access_expr.props->count; i++) {
-    const char *prop =
-        expr->data.access_expr.props->get(expr->data.access_expr.props, i);
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", prop);
+  expression_visitor(expr->data.access_expr.prop);
+  if (expr->data.access_expr.prop->type != EXPR_CALL) {
     INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "GET");
   }
-  // TODO: support pass this ptr, may be use.
-  // expression_visitor(expr->data.access_expr.obj);
 }
 
 void expression_access_visitor_for_call(struct syntax_expr *expr) {
-  assert(expr->type == EXPR_ACCESS);
-  expression_visitor(expr->data.access_expr.obj);
-  for (int i = 0; i < expr->data.access_expr.props->count; i++) {
-    if (i == expr->data.access_expr.props->count - 1) {
-      INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "COPY");
-    }
-    const char *prop =
-        expr->data.access_expr.props->get(expr->data.access_expr.props, i);
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s", prop);
-    INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "GET");
-  }
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "COPY");
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "PUSH_S %s",
+                   expr->data.call_expr.func_name);
+  INSTRUCTION_SAVE(CURRENT_FUNCTION_NAME, "GET");
 }
 
 // LIT_INT, LIT_FLOAT, LIT_STR, LIT_BOOL
@@ -2458,7 +2453,7 @@ a.name(1, 2)
 void expression_call_visitor(struct syntax_expr *expr) {
   assert(expr->type == EXPR_CALL);
   if (expr->data.call_expr.source_in_stack) {
-    expression_access_visitor_for_call(expr->data.call_expr.source);
+    expression_access_visitor_for_call(expr);
   }
 
   if (expr->data.call_expr.is_from_params) {

@@ -1,0 +1,5 @@
+{"root":{"value":12, "next":null}, "count":1, "push":[FUNCTION __list_push], "each":[FUNCTION __list_each], "get":[FUNCTION __list_get], "erase":[FUNCTION __list_erase], "tail":{"value":12, "next":null}}
+[FUNCTION __list_get]
+{"value":12, "next":null}
+12
+null
