@@ -62,11 +62,12 @@ func __string_equal(other) {
   if (this.len() != other.len()) {
     return false;
   }
-  // native_string_equal(this, other);
+  return native_string_equal(this.value, other.value);
 }
 
 func __string_substr(start, size) {
-  return native_string_substr(this.value, start, size);
+  var x  = native_string_substr(this.value, start, size);
+  return String(x);
 }
 
 func String(s) {

@@ -3059,6 +3059,9 @@ void init_builtin(VM *vm) {
 
   map_insert(vm->symbols, "native_string_substr",
              build_builtin_fuction(vm, "native_string_substr"));
+
+  map_insert(vm->symbols, "native_string_equal",
+             build_builtin_fuction(vm, "native_string_equal"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3714,6 +3717,20 @@ void native_string_len(VM *vm) {
   map_insert(vm->registers, "ei", ret);
 }
 
+void native_string_equal(VM *vm) {
+  ZValue *ls = vm->stacks[vm->sp];
+  ZValue *rs = vm->stacks[vm->sp - 1];
+  assert(ls->type == VAL_REF);
+  assert(rs->type == VAL_REF);
+  ZRefValue *lref = (ZRefValue *)ls->data.ptr;
+  ZRefValue *rref = (ZRefValue *)rs->data.ptr;
+  assert(lref->type == REF_VAL_STR && rref->type == REF_VAL_STR);
+  int cmp = strcmp(lref->data.str->c_str, rref->data.str->c_str);
+  ZValue *result = allocator_data(vm->mm, VAL_BOOL, 0, NULL);
+  result->data.b_val = cmp == 0;
+  map_insert(vm->registers, "ei", result);
+}
+
 void native_string_substr(VM *vm) {
   ZValue *str = vm->stacks[vm->sp];
   ZValue *start = vm->stacks[vm->sp - 1];
@@ -3853,6 +3870,8 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     native_string_len(vm);
   } else if (strcmp(func->name, "native_string_substr") == 0) {
     native_string_substr(vm);
+  } else if (strcmp(func->name, "native_string_equal") == 0) {
+    native_string_equal(vm);
   } else {
     assert(false);
   }
@@ -4028,6 +4047,12 @@ void CHECK_INST_RUN(VM *vm, ZValue *value) {
                 "expected type is bool, but get %s",
                 get_type_str(need_check->type));
   } else if (type == TYPE_STR) {
+    if (need_check->type == VAL_REF) {
+      ZRefValue *ref = (ZRefValue *)need_check->data.ptr;
+      if (ref->type == REF_VAL_STR) {
+        return;
+      }
+    }
     ZERO_ASSERT(need_check->type == VAL_STR_INDEX,
                 "expected type is string, but get %s",
                 get_type_str(need_check->type));
