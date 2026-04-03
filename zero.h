@@ -3784,7 +3784,7 @@ void native_string_substr(VM *vm) {
   if (start_index >= raw_size) {
     map_insert(vm->registers, "ei",
                allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                              &(AllocatorParams){.str.str_length = 0}));
+                              &(AllocatorParams){.str.str_length = 1}));
     return;
   }
   if ((start_index + size_value - 1) >= raw_size) {
@@ -3824,7 +3824,7 @@ void native_read(VM *vm) {
   if (v->type == VAL_NULL) {
     map_insert(vm->registers, "ei",
                allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                              &(AllocatorParams){.str.str_length = 0}));
+                              &(AllocatorParams){.str.str_length = 1}));
     return;
   }
   assert(v->type == VAL_REF);
@@ -3841,7 +3841,7 @@ void native_read(VM *vm) {
   if (fdv == NULL) {
     map_insert(vm->registers, "ei",
                allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                              &(AllocatorParams){.str.str_length = 0}));
+                              &(AllocatorParams){.str.str_length = 1}));
     return;
   }
   assert(fdv->type == VAL_INT);
@@ -3850,7 +3850,7 @@ void native_read(VM *vm) {
   if (file_size == -1) {
     map_insert(vm->registers, "ei",
                allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                              &(AllocatorParams){.str.str_length = 0}));
+                              &(AllocatorParams){.str.str_length = 1}));
     return;
   }
   lseek(fd, 0, SEEK_SET);
@@ -3858,7 +3858,7 @@ void native_read(VM *vm) {
   if (file_content == NULL) {
     map_insert(vm->registers, "ei",
                allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                              &(AllocatorParams){.str.str_length = 0}));
+                              &(AllocatorParams){.str.str_length = 1}));
     return;
   }
   ssize_t read_bytes = read(fd, file_content, file_size);
@@ -3866,7 +3866,7 @@ void native_read(VM *vm) {
     free(file_content);
     map_insert(vm->registers, "ei",
                allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                              &(AllocatorParams){.str.str_length = 0}));
+                              &(AllocatorParams){.str.str_length = 1}));
     return;
   }
   file_content[read_bytes] = '\0';

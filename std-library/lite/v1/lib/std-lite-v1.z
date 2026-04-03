@@ -54,6 +54,10 @@ equal:
   object;
 concat:
   object;
+startswith:
+  object;
+endswith:
+  object;
 };
 
 func __string_print() { native_print(this.value); }
@@ -76,11 +80,24 @@ func __string_substr(start, size) {
   return String(x);
 }
 
+func __string_startswith(str){
+  var x = this.substr(0, str.len());
+  return native_string_equal(x.value, str.value);
+}
+
+func __string_endswith(str){
+  var size = this.len() - str.len();
+  var x = this.substr(size, str.len());
+  return native_string_equal(x.value, str.value);
+}
+
 func String(s) {
   return new __string_ref{value = s, __str__ = __string_print,
                           len = __string_len, substr = __string_substr,
                           equal = __string_equal,
-                          concat = __string_concat};
+                          concat = __string_concat,
+                          startswith = __string_startswith,
+                          endswith = __string_endswith};
 }
 
 typedef __list_node {

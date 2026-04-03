@@ -1,0 +1,127 @@
+__init__:
+main:
+  PUSH_S Hello World
+  CALL String
+  FREE 1
+  LOAD [ei]
+  STORE #1
+  LOAD #1
+  COPY
+  PUSH_S startswith
+  GET
+  PUSH_S Hello
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S startswith
+  GET
+  PUSH_S Hello World
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S startswith
+  GET
+  PUSH_S Hello1
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S startswith
+  GET
+  PUSH_S 
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S endswith
+  GET
+  PUSH_S World
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S endswith
+  GET
+  PUSH_S Hello World
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S endswith
+  GET
+  PUSH_S 
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S endswith
+  GET
+  PUSH_S Hello WorldHello World
+  CALL String
+  FREE 1
+  LOAD [ei]
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL print
+  FREE 1
+  LOAD [ei]
+  FREE 1
