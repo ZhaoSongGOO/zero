@@ -3062,6 +3062,8 @@ void init_builtin(VM *vm) {
 
   map_insert(vm->symbols, "native_string_equal",
              build_builtin_fuction(vm, "native_string_equal"));
+  map_insert(vm->symbols, "native_string_concat",
+             build_builtin_fuction(vm, "native_string_concat"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3731,6 +3733,39 @@ void native_string_equal(VM *vm) {
   map_insert(vm->registers, "ei", result);
 }
 
+void native_string_concat(VM *vm) {
+  ZValue *src = vm->stacks[vm->sp - 1];
+  ZValue *target = vm->stacks[vm->sp];
+
+  assert(src->type == VAL_REF || src->type == VAL_STR_INDEX);
+  assert(target->type == VAL_REF);
+
+  ZRefValue *tref = (ZRefValue *)target->data.ptr;
+  assert(tref->type == REF_VAL_STR);
+
+  const char *src_str = NULL;
+  if (src->type == VAL_REF) {
+    ZRefValue *sref = (ZRefValue *)src->data.ptr;
+    assert(sref->type == REF_VAL_STR);
+    src_str = sref->data.str->c_str;
+  } else {
+    src_str = vm->cvalues->get(vm->cvalues, src->data.i_val);
+  }
+
+  if (src_str == NULL || strlen(src_str) == 0) {
+    return;
+  }
+
+  const char *target_src = tref->data.str->c_str;
+  int count = strlen(target_src) + strlen(src_str) + 1;
+  char *new_str = (char *)malloc(sizeof(char) * count);
+  memcpy(new_str, target_src, strlen(target_src));
+  memcpy(new_str + strlen(target_src), src_str, strlen(src_str));
+  *(new_str + count) = '\0';
+  free(target_src);
+  tref->data.str->c_str = new_str;
+}
+
 void native_string_substr(VM *vm) {
   ZValue *str = vm->stacks[vm->sp];
   ZValue *start = vm->stacks[vm->sp - 1];
@@ -3872,6 +3907,8 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     native_string_substr(vm);
   } else if (strcmp(func->name, "native_string_equal") == 0) {
     native_string_equal(vm);
+  } else if (strcmp(func->name, "native_string_concat") == 0) {
+    native_string_concat(vm);
   } else {
     assert(false);
   }

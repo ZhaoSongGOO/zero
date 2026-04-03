@@ -1,0 +1,6 @@
+include("std-library/lite/v1/lib/std-lite-v1");
+func main() {
+  var s = String("Hello World");
+  s.concat(" ~~~~~");
+  print(s);
+}
