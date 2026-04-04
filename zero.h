@@ -3862,7 +3862,6 @@ void native_vector_get(VM *vm) {
   } else {
     result = allocator_data(vm->mm, VAL_REF, 0,
                             &(AllocatorParams){.ref.is_shell = true});
-    result->type = ((ZRefValue *)result_value->data.ptr)->type;
     result->data.ptr = result_value->data.ptr;
     ((ZRefValue *)result_value->data.ptr)->ref_count += 1;
   }
