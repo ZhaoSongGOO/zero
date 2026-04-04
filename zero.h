@@ -3073,6 +3073,9 @@ void init_builtin(VM *vm) {
              build_builtin_fuction(vm, "native_vector_insert"));
   map_insert(vm->symbols, "native_vector_get",
              build_builtin_fuction(vm, "native_vector_get"));
+
+  map_insert(vm->symbols, "native_panic",
+             build_builtin_fuction(vm, "native_panic"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3885,6 +3888,15 @@ void native_open(VM *vm) {
   map_insert(vm->registers, "ei", f);
 }
 
+void native_panic(VM *vm) {
+  ZValue *code = vm->stacks[vm->sp];
+  ZValue *msg = vm->stacks[vm->sp - 1];
+  assert(code->type == VAL_INT);
+  assert(msg->type == VAL_STR_INDEX);
+  printf("[PANIC]:%s\n", vm->cvalues->get(vm->cvalues, msg->data.i_val));
+  exit(code->data.i_val);
+}
+
 void native_read(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   if (v->type == VAL_NULL) {
@@ -3979,6 +3991,8 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     native_vector_insert(vm);
   } else if (strcmp(func->name, "native_vector_get") == 0) {
     native_vector_get(vm);
+  } else if (strcmp(func->name, "native_panic") == 0) {
+    native_panic(vm);
   } else {
     assert(false);
   }

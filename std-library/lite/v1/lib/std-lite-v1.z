@@ -7,6 +7,16 @@
 
 func print(msg) { native_println(msg); }
 
+func panic(code, msg) { native_panic(code, msg); }
+
+var ASSERT_PANIC_CODE = 1;
+
+func assert(condition, msg) {
+  if (!condition) {
+    native_panic(ASSERT_PANIC_CODE, msg);
+  }
+}
+
 typedef __bool_ref {
 value:
   bool;

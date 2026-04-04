@@ -1,0 +1,36 @@
+__init__:
+main:
+  PUSH_S It's a panic form zero assert api with condition `true`
+  PUSH_B 1
+  CALL assert
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  PUSH_S It's a panic form zero assert api with condition `null`
+  PUSH_N
+  CALL assert
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  PUSH_S It's a panic form zero assert api with condition `1==2`
+  PUSH_D 1
+  PUSH_D 2
+  E
+  CALL assert
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  PUSH_S It's a panic form zero assert api with condition `1<2`
+  PUSH_D 1
+  PUSH_D 2
+  L
+  CALL assert
+  FREE 2
+  LOAD [ei]
+  FREE 1
+  PUSH_S It's a panic form zero script!
+  PUSH_D 1
+  CALL panic
+  FREE 2
+  LOAD [ei]
+  FREE 1
