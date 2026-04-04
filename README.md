@@ -17,14 +17,14 @@ func main(){
 
 ## Doc
 
-- [Syntax](./syntax.md)
+- [Syntax](./doc/syntax.md)
 
-- [TODO](./TODO.md)
+- [TODO](./doc/TODO.md)
 
-- [Introduction English](./introduction-en.md)
+- [Introduction English](./doc/introduction-en.md)
 
-- [Introduction Chinese](./introduction-zh-cn.md)
+- [Introduction Chinese](./doc/introduction-zh-cn.md)
 
-- [ASM](./asm.md)
+- [ASM](./doc/asm.md)
 
 - [VS Code Extension](./zero-language-extension/README.md)
