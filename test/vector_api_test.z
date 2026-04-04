@@ -2,11 +2,17 @@ include("std-library/lite/v1/lib/std-lite-v1");
 func main() {
   var v = Vector();
   print(v);
+  print(v.size());
   v.push(1);
+  print(v.size());
   v.push(2);
+  print(v.size());
   v.push(3);
+  print(v.size());
   v.push(4);
+  print(v.size());
   v.push(5);
+  print(v.size());
   print(v);
   print(v.get(-1));
   print(v.get(0));
@@ -15,20 +21,26 @@ func main() {
   print(v.get(3));
   print(v.get(4));
   print(v.get(5));
+  print(v.size());
 
   var x = v.insert(5, 9);
+  print(v.size());
   print(v);
   print(x);
   x = v.insert(0, 9);
+  print(v.size());
   print(v);
   print(x);
   x = v.insert(2, 9);
+  print(v.size());
   print(v);
   print(x);
   x = v.insert(100, 9);
+  print(v.size());
   print(v);
   print(x);
   x = v.insert(2, 9);
+  print(v.size());
   print(v);
   print(x);
 }

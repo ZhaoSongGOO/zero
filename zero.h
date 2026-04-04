@@ -2557,6 +2557,7 @@ typedef struct {
 
 typedef struct {
   int length;
+  int capacity;
   ZValue **elements;
 } ZArray;
 
@@ -2665,13 +2666,14 @@ ZObject *allocator_object_data(MemoryManager *manager,
 ZArray *allocator_array_data(MemoryManager *manager, AllocatorParams *params) {
   ZArray *arr = (ZArray *)malloc(sizeof(ZArray));
   arr->length = params->arr.elem_count;
-  if (arr->length != 0) {
-    arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->length);
+  arr->capacity = arr->length * 2 == 0 ? 2 : arr->length * 2;
+  if (arr->capacity != 0) {
+    arr->elements = (ZValue **)malloc(sizeof(ZValue *) * arr->capacity);
   } else {
     arr->elements = NULL;
   }
 
-  memory_allocator(manager, sizeof(ZArray) + sizeof(ZValue *) * arr->length);
+  memory_allocator(manager, sizeof(ZArray) + sizeof(ZValue *) * arr->capacity);
   return arr;
 }
 
@@ -2798,6 +2800,8 @@ void deallocator_arr_data(MemoryManager *manager, ZArray *arr) {
       deallocator_data(manager, e);
     }
   }
+  memory_deallocator(manager, (sizeof(ZValue *)) * (arr->capacity));
+  free(arr->elements);
   free(arr);
   memory_deallocator(manager, sizeof(ZArray));
 }
@@ -3064,6 +3068,11 @@ void init_builtin(VM *vm) {
              build_builtin_fuction(vm, "native_string_equal"));
   map_insert(vm->symbols, "native_string_concat",
              build_builtin_fuction(vm, "native_string_concat"));
+
+  map_insert(vm->symbols, "native_vector_insert",
+             build_builtin_fuction(vm, "native_vector_insert"));
+  map_insert(vm->symbols, "native_vector_get",
+             build_builtin_fuction(vm, "native_vector_get"));
 }
 
 const Map *GET_ACTIONS() {
@@ -3800,6 +3809,63 @@ void native_string_substr(VM *vm) {
   map_insert(vm->registers, "ei", ret);
 }
 
+void native_vector_insert(VM *vm) {
+  ZValue *target = vm->stacks[vm->sp];
+  ZValue *index = vm->stacks[vm->sp - 1];
+  ZValue *src = vm->stacks[vm->sp - 2];
+  assert(target->type == VAL_REF);
+  ZRefValue *ref = (ZRefValue *)target->data.ptr;
+  assert(ref->type == REF_VAL_ARR);
+  assert(index->type == VAL_INT);
+  if (ref->data.arr->length < ref->data.arr->capacity) {
+    for (int i = ref->data.arr->length; i > index->data.i_val; i--) {
+      ref->data.arr->elements[i] = ref->data.arr->elements[i - 1];
+    }
+    ref->data.arr->elements[index->data.i_val] = copy(vm, src);
+    ref->data.arr->length += 1;
+    return;
+  }
+  int raw_capacity = ref->data.arr->capacity;
+  ref->data.arr->capacity *= 2;
+  ZValue **elements = ref->data.arr->elements;
+  ref->data.arr->elements =
+      (ZValue **)malloc(sizeof(ZValue *) * ref->data.arr->capacity);
+  memory_allocator(vm->mm, sizeof(ZValue *) * ref->data.arr->capacity);
+  for (int i = 0; i < index->data.i_val; i++) {
+    ref->data.arr->elements[i] = elements[i];
+  }
+  for (int i = ref->data.arr->length; i > index->data.i_val; i--) {
+    ref->data.arr->elements[i] = elements[i - 1];
+  }
+  ref->data.arr->elements[index->data.i_val] = copy(vm, src);
+  ref->data.arr->length += 1;
+  free(elements);
+  memory_deallocator(vm->mm, sizeof(ZValue *) * raw_capacity);
+}
+
+void native_vector_get(VM *vm) {
+  ZValue *arr = vm->stacks[vm->sp];
+  ZValue *index = vm->stacks[vm->sp - 1];
+  assert(arr->type == VAL_REF);
+  ZRefValue *ref = (ZRefValue *)arr->data.ptr;
+  assert(ref->type == REF_VAL_ARR);
+  assert(index->type == VAL_INT);
+  assert(index->data.i_val < ref->data.arr->length);
+  ZValue *result_value = ref->data.arr->elements[index->data.i_val];
+  ZValue *result = NULL;
+  if (result_value->type != VAL_REF) {
+    result = allocator_data(vm->mm, result_value->type, 0, NULL);
+    result->data = result_value->data;
+  } else {
+    result = allocator_data(vm->mm, VAL_REF, 0,
+                            &(AllocatorParams){.ref.is_shell = true});
+    result->type = ((ZRefValue *)result_value->data.ptr)->type;
+    result->data.ptr = result_value->data.ptr;
+    ((ZRefValue *)result_value->data.ptr)->ref_count += 1;
+  }
+  map_insert(vm->registers, "ei", result);
+}
+
 void native_open(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
   assert(v->type == VAL_STR_INDEX);
@@ -3909,6 +3975,10 @@ void call_builtin_function(VM *vm, ZFunction *func) {
     native_string_equal(vm);
   } else if (strcmp(func->name, "native_string_concat") == 0) {
     native_string_concat(vm);
+  } else if (strcmp(func->name, "native_vector_insert") == 0) {
+    native_vector_insert(vm);
+  } else if (strcmp(func->name, "native_vector_get") == 0) {
+    native_vector_get(vm);
   } else {
     assert(false);
   }
