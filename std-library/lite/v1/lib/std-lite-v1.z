@@ -5,18 +5,36 @@
  * and basic arithmetic operations.
  */
 
+/*
+ * Prints a message to stdout with a newline at the end
+ * @param msg: The value to be printed (supports any type)
+ */
 func print(msg) { native_println(msg); }
 
+/*
+ * Triggers a program panic, terminating execution with an error message
+ * @param code: The panic error code
+ * @param msg: The panic error message
+ */
 func panic(code, msg) { native_panic(code, msg); }
 
 var ASSERT_PANIC_CODE = 1;
 
+/*
+ * Asserts that a condition is true, otherwise triggers panic
+ * @param condition: Boolean expression to check
+ * @param msg: Error message if assertion fails
+ */
 func assert(condition, msg) {
   if (!condition) {
     native_panic(ASSERT_PANIC_CODE, msg);
   }
 }
 
+/* ============== Bool Type ============== */
+/*
+ * Boolean value wrapper type with string representation and hash support
+ */
 typedef __bool_ref {
 value:
   bool;
@@ -26,15 +44,31 @@ __hash__:
   object;
 };
 
+/*
+ * Prints boolean as string ("true" or "false")
+ */
 func __bool_print() { native_print(this.value); }
 
+/*
+ * Returns boolean value for use as hash key
+ * @return: The underlying boolean value
+ */
 func __bool_hash() { return this.value; }
 
+/*
+ * Bool constructor - wraps a raw boolean into __bool_ref object
+ * @param a: Raw boolean value
+ * @return: __bool_ref object
+ */
 func Bool(a) {
   return new __bool_ref{value = a, __str__ = __bool_print,
                         __hash__ = __bool_hash};
 }
 
+/* ============== Int Type ============== */
+/*
+ * Integer value wrapper type with string representation and hash support
+ */
 typedef __int_ref {
 value:
   int;
@@ -43,14 +77,31 @@ __str__:
 __hash__:
   object;
 };
+
+/*
+ * Prints integer value
+ */
 func __int_print() { native_print(this.value); }
 
+/*
+ * Returns integer value for use as hash key
+ * @return: The underlying integer value
+ */
 func __int_hash() { return this.value; }
 
+/*
+ * Int constructor - wraps a raw integer into __int_ref object
+ * @param a: Raw integer value
+ * @return: __int_ref object
+ */
 func Int(a) {
   return new __int_ref{value = a, __str__ = __int_print, __hash__ = __int_hash};
 }
 
+/* ============== String Type ============== */
+/*
+ * String wrapper type providing rich string manipulation methods
+ */
 typedef __string_ref {
 value:
   string;
@@ -70,10 +121,22 @@ endswith:
   object;
 };
 
+/*
+ * Prints string content to stdout
+ */
 func __string_print() { native_print(this.value); }
 
+/*
+ * Returns the length of the string
+ * @return: Integer representing string length
+ */
 func __string_len() { return native_string_len(this.value); }
 
+/*
+ * Compares two strings for equality
+ * @param other: Another __string_ref object to compare with
+ * @return: true if strings are equal, false otherwise
+ */
 func __string_equal(other) {
   if (this.len() != other.len()) {
     return false;
@@ -81,24 +144,49 @@ func __string_equal(other) {
   return native_string_equal(this.value, other.value);
 }
 
+/*
+ * Concatenates another string to the end of current string (mutates current string)
+ * @param other: Another __string_ref object to append
+ */
 func __string_concat(other) { native_string_concat(this.value, other); }
 
+/*
+ * Extracts a substring from the string
+ * @param start: Starting position (0-based index)
+ * @param size: Number of characters to extract
+ * @return: New String object containing the substring
+ */
 func __string_substr(start, size) {
   var x = native_string_substr(this.value, start, size);
   return String(x);
 }
 
+/*
+ * Checks if the string starts with a given prefix
+ * @param str: Another __string_ref object representing the prefix
+ * @return: true if string starts with the prefix, false otherwise
+ */
 func __string_startswith(str) {
   var x = this.substr(0, str.len());
   return native_string_equal(x.value, str.value);
 }
 
+/*
+ * Checks if the string ends with a given suffix
+ * @param str: Another __string_ref object representing the suffix
+ * @return: true if string ends with the suffix, false otherwise
+ */
 func __string_endswith(str) {
   var size = this.len() - str.len();
   var x = this.substr(size, str.len());
   return native_string_equal(x.value, str.value);
 }
 
+/*
+ * String constructor - wraps a raw string into __string_ref object
+ * @param s: Raw string value
+ * @return: __string_ref object with all string methods
+ */
 func String(s) {
   return new __string_ref{value = s,
                           __str__ = __string_print,
@@ -110,6 +198,10 @@ func String(s) {
                           endswith = __string_endswith};
 }
 
+/* ============== Vector Type ============== */
+/*
+ * Dynamic array type supporting index-based access, push, insert, and size operations
+ */
 typedef __vector {
 value:
   object;
@@ -125,6 +217,11 @@ __str__:
   object;
 };
 
+/*
+ * Gets element at specified index
+ * @param index: Integer index (0-based)
+ * @return: Element at index, or null if index is invalid (negative or out of bounds)
+ */
 func __vector_get(index) {
   if (index < 0) {
     return null;
@@ -135,10 +232,24 @@ func __vector_get(index) {
   return native_vector_get(this.value.__data__, index);
 }
 
+/*
+ * Returns the number of elements in the vector
+ * @return: Integer representing element count
+ */
 func __vector_size() { return this.value.count; }
 
+/*
+ * Appends an element to the end of the vector
+ * @param data: The element to append
+ */
 func __vector_push(data) { this.insert(this.value.count, data); }
 
+/*
+ * Inserts an element at the specified index
+ * @param index: Position to insert at (0-based)
+ * @param data: The element to insert
+ * @return: The inserted element, or null if index is out of bounds
+ */
 func __vector_insert(index, data) {
   if (index < 0 || index > this.value.count) {
     return null;
@@ -148,14 +259,25 @@ func __vector_insert(index, data) {
   return this.get(index);
 }
 
+/*
+ * Prints the vector's string representation
+ */
 func __vector_print() { native_print(this.value.__data__); }
 
+/*
+ * Vector constructor - creates an empty dynamic array
+ * @return: Empty __vector object
+ */
 func Vector() {
   return new __vector{value = [],           get = __vector_get,
                       push = __vector_push, insert = __vector_insert,
                       size = __vector_size, __str__ = __vector_print};
 }
 
+/* ============== List Type ============== */
+/*
+ * Doubly linked list node type
+ */
 typedef __list_node {
 value:
   object;
@@ -163,6 +285,9 @@ next:
   __list_node;
 };
 
+/*
+ * Doubly linked list type supporting push, each, get, and erase operations
+ */
 typedef __list {
 root:
   __list_node;
@@ -180,6 +305,11 @@ erase:
   object;
 };
 
+/*
+ * Appends an element to the end of the list
+ * @param v: The value to append
+ * @return: The newly created __list_node
+ */
 func __list_push(v) {
   var l = new __list_node{value = v};
   if (this.root == null) {
@@ -193,6 +323,10 @@ func __list_push(v) {
   return l;
 }
 
+/*
+ * Iterates over each node in the list, executing the given action
+ * @param action: Function to execute on each node (receives __list_node as argument)
+ */
 func __list_each(action) {
   if (this.root == null) {
     return null;
@@ -205,6 +339,11 @@ func __list_each(action) {
   }
 }
 
+/*
+ * Gets the node at the specified index
+ * @param index: Integer index (0-based)
+ * @return: __list_node at index, or null if index is invalid
+ */
 func __list_get(index) {
   if (index >= this.count) {
     return null;
@@ -226,6 +365,11 @@ func __list_get(index) {
   return null;
 }
 
+/*
+ * Removes the node at the specified index
+ * @param index: Integer index (0-based)
+ * @return: The removed __list_node, or null if index is invalid
+ */
 func __list_erase(index) {
   if (index >= this.count) {
     return null;
@@ -267,11 +411,19 @@ func __list_erase(index) {
   }
 }
 
+/*
+ * List constructor - creates an empty doubly linked list
+ * @return: Empty __list object
+ */
 func List() {
   return new __list{push = __list_push, count = 0, each = __list_each,
                     get = __list_get, erase = __list_erase};
 }
 
+/* ============== Map Type ============== */
+/*
+ * Binary search tree node type
+ */
 typedef __map_node {
 key:
   object;
@@ -283,6 +435,9 @@ right:
   __map_node;
 };
 
+/*
+ * Map type implemented as binary search tree, supporting insert, find, and each operations
+ */
 typedef __map {
 root:
   __map_node;
@@ -296,6 +451,13 @@ each:
   object;
 };
 
+/*
+ * Recursive helper function for BST insertion
+ * @param node: Current BST node
+ * @param key: Key to insert
+ * @param value: Value to associate with the key
+ * @return: The inserted or updated __map_node
+ */
 func __map_insert_helper(node, key, value) {
   if (node.key.__hash__() == key.__hash__()) {
     node.value = value;
@@ -319,6 +481,12 @@ func __map_insert_helper(node, key, value) {
   }
 }
 
+/*
+ * Inserts a key-value pair into the map; updates value if key already exists
+ * @param key: The key object (must implement __hash__)
+ * @param value: The value to associate with the key
+ * @return: The inserted or updated __map_node
+ */
 func __map_insert(key, value) {
   if (this.root == null) {
     this.root = new __map_node{key = key, value = value};
@@ -329,6 +497,12 @@ func __map_insert(key, value) {
   return __map_insert_helper(this.root, key, value);
 }
 
+/*
+ * Recursive helper function for BST lookup
+ * @param node: Current BST node
+ * @param key: Key to find
+ * @return: __map_node if found, null otherwise
+ */
 func __map_find_helper(node, key) {
   if (node == null) {
     return null;
@@ -343,8 +517,18 @@ func __map_find_helper(node, key) {
   }
 }
 
+/*
+ * Finds a key in the map and returns its node
+ * @param key: The key to search for
+ * @return: __map_node containing key/value, or null if not found
+ */
 func __map_find(key) { return __map_find_helper(this.root, key); }
 
+/*
+ * Recursive helper function for in-order BST traversal
+ * @param node: Current BST node
+ * @param action: Function to execute on each node (receives __map_node as argument)
+ */
 func __map_each_helper(node, action) {
   if (node == null) {
     return null;
@@ -354,24 +538,49 @@ func __map_each_helper(node, action) {
   __map_each_helper(node.right, action);
 }
 
+/*
+ * Iterates over each node in the map, executing the given action (in-order traversal)
+ * @param action: Function to execute on each node
+ */
 func __map_each(action) { __map_each_helper(this.root, action); }
 
+/*
+ * Map constructor - creates an empty binary search tree map
+ * @return: Empty __map object
+ */
 func Map() {
   return new __map{count = 0, insert = __map_insert, find = __map_find,
                    each = __map_each};
 }
 
+/* ============== File Type ============== */
+/*
+ * File handle type wrapping a file descriptor
+ */
 typedef File {
 fd:
   int;
 };
 
+/*
+ * Opens a file at the specified path
+ * @param p: File path string
+ * @return: File object on success
+ */
 func open(p) {
   var f = native_open(p);
   return new File{fd = f};
 }
 
+/*
+ * Reads content from a file
+ * @param file: File object to read from
+ * @return: File content
+ */
 func read(file) { return native_read(file); }
 
-// TODO(To be implemented)
+/*
+ * Closes an open file
+ * @param file: File object to close
+ */
 func close(file) { native_close(file); }
