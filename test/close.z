@@ -1,0 +1,16 @@
+include("std");
+
+func main(){
+    var f = open("test/read_test.txt");
+    var x = read(f);
+    print(x);
+
+    var result = close(f);
+    print(result);
+
+    var ff = read(f);
+    print(ff);
+    
+    var fff = close(f);
+    print(fff);
+}

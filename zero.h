@@ -3961,8 +3961,39 @@ void native_read(VM *vm) {
   map_insert(vm->registers, "ei", sf);
 }
 
-// TODO(To be implemented)
-void native_close(VM *vm) {}
+void native_close(VM *vm) {
+  ZValue *v = vm->stacks[vm->sp];
+  if (v->type == VAL_NULL) {
+    map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
+    return;
+  }
+  assert(v->type == VAL_REF);
+  ZRefValue *obj_ref = (ZRefValue *)v->data.ptr;
+  assert(obj_ref->type == REF_VAL_OBJ);
+  ZObject *obj = obj_ref->data.obj;
+  ZValue *fdv = NULL;
+  for (int i = 0; i < obj->count; i++) {
+    if (strcmp("fd", obj->entries[i].key) == 0) {
+      fdv = obj->entries[i].value;
+      break;
+    }
+  }
+  if (fdv == NULL) {
+    map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
+    return;
+  }
+  assert(fdv->type == VAL_INT);
+  int fd = fdv->data.i_val;
+  int result = close(fd);
+  // Avoid accidental reuse of file descriptors after closing.
+  if (result == -1) {
+    map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
+    return;
+  }
+
+  fdv->data.i_val = -1;
+  map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
+}
 
 void call_builtin_function(VM *vm, ZFunction *func) {
   assert(func->is_builtin);
