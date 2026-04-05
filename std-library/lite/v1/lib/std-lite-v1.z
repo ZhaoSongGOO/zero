@@ -145,7 +145,8 @@ func __string_equal(other) {
 }
 
 /*
- * Concatenates another string to the end of current string (mutates current string)
+ * Concatenates another string to the end of current string (mutates current
+ * string)
  * @param other: Another __string_ref object to append
  */
 func __string_concat(other) { native_string_concat(this.value, other); }
@@ -182,6 +183,19 @@ func __string_endswith(str) {
   return native_string_equal(x.value, str.value);
 }
 
+func join(vecs, label) {
+  var i = 0;
+  var s = String("");
+  while (i < vecs.size()) {
+    s.concat(vecs.get(i));
+    if (i != vecs.size() - 1) {
+      s.concat(label);
+    }
+    i = i + 1;
+  }
+  return s;
+}
+
 /*
  * String constructor - wraps a raw string into __string_ref object
  * @param s: Raw string value
@@ -200,7 +214,8 @@ func String(s) {
 
 /* ============== Vector Type ============== */
 /*
- * Dynamic array type supporting index-based access, push, insert, and size operations
+ * Dynamic array type supporting index-based access, push, insert, and size
+ * operations
  */
 typedef __vector {
 value:
@@ -220,7 +235,8 @@ __str__:
 /*
  * Gets element at specified index
  * @param index: Integer index (0-based)
- * @return: Element at index, or null if index is invalid (negative or out of bounds)
+ * @return: Element at index, or null if index is invalid (negative or out of
+ * bounds)
  */
 func __vector_get(index) {
   if (index < 0) {
@@ -325,7 +341,8 @@ func __list_push(v) {
 
 /*
  * Iterates over each node in the list, executing the given action
- * @param action: Function to execute on each node (receives __list_node as argument)
+ * @param action: Function to execute on each node (receives __list_node as
+ * argument)
  */
 func __list_each(action) {
   if (this.root == null) {
@@ -436,7 +453,8 @@ right:
 };
 
 /*
- * Map type implemented as binary search tree, supporting insert, find, and each operations
+ * Map type implemented as binary search tree, supporting insert, find, and each
+ * operations
  */
 typedef __map {
 root:
@@ -527,7 +545,8 @@ func __map_find(key) { return __map_find_helper(this.root, key); }
 /*
  * Recursive helper function for in-order BST traversal
  * @param node: Current BST node
- * @param action: Function to execute on each node (receives __map_node as argument)
+ * @param action: Function to execute on each node (receives __map_node as
+ * argument)
  */
 func __map_each_helper(node, action) {
   if (node == null) {
@@ -539,7 +558,8 @@ func __map_each_helper(node, action) {
 }
 
 /*
- * Iterates over each node in the map, executing the given action (in-order traversal)
+ * Iterates over each node in the map, executing the given action (in-order
+ * traversal)
  * @param action: Function to execute on each node
  */
 func __map_each(action) { __map_each_helper(this.root, action); }

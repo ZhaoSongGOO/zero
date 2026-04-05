@@ -1,0 +1,9 @@
+include("std-library/lite/v1/lib/std-lite-v1");
+func main() {
+  var v = Vector();
+  v.push("a");
+  v.push("b");
+  v.push("c");
+  var s = join(v, "#");
+  print(s);
+}
