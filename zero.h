@@ -2531,11 +2531,8 @@ void expression_object_visitor(struct syntax_expr *expr) {
 }
 
 typedef enum {
-  VAL_INT,
-  VAL_FLOAT,
-  VAL_BOOL,
-  VAL_CHAR,
   VAL_REF,
+  VAL_INT,
   VAL_OFFSET,
   VAL_REGISTER,
   VAL_NULL,
@@ -2546,16 +2543,14 @@ typedef enum {
   REF_VAL_ARR,
   REF_VAL_FUNC,
   REF_VAL_STR,
+  REF_VAL_NUMBER
 } RefValueType;
 
 typedef struct {
   ValueType type;
   union {
     int i_val;
-    float f_val;
-    bool b_val;
     void *ptr;
-    char c_val;
   } data;
 } ZValue;
 
@@ -2564,6 +2559,21 @@ typedef struct {
   int capacity;
   ZValue **elements;
 } ZArray;
+
+typedef struct {
+  enum {
+    VAL_NUMBER_INT,
+    VAL_NUMBER_FLOAT,
+    VAL_NUMBER_BOOL,
+    VAL_NUMBER_CHAR,
+  } type;
+  union {
+    int i_val;
+    float f_val;
+    bool b_val;
+    char c_val;
+  } data;
+} ZNumber;
 
 typedef struct {
   const char *key;
@@ -2596,6 +2606,7 @@ typedef struct {
     ZArray *arr;
     ZString *str;
     ZFunction *func;
+    ZNumber *number;
   } data;
 } ZRefValue;
 
@@ -2623,6 +2634,10 @@ typedef struct zero_memory_allocator_params {
   struct {
     bool is_shell;
   } ref;
+
+  struct {
+    int number_type;
+  } number;
 } AllocatorParams;
 
 ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
@@ -2709,6 +2724,14 @@ ZFunction *allocator_func_data(MemoryManager *manager,
   return func;
 }
 
+ZNumber *allocator_number_data(MemoryManager *manager,
+                               AllocatorParams *params) {
+  ZNumber *number = (ZNumber *)malloc(sizeof(ZNumber));
+  number->type = params->number.number_type;
+  memory_allocator(manager, sizeof(ZFunction));
+  return number;
+}
+
 ZRefValue *allocator_ref_data(MemoryManager *manager, int ref_type,
                               AllocatorParams *params) {
   ZRefValue *ref = (ZRefValue *)malloc(sizeof(ZRefValue));
@@ -2725,6 +2748,9 @@ ZRefValue *allocator_ref_data(MemoryManager *manager, int ref_type,
   } break;
   case REF_VAL_FUNC: {
     ref->data.func = allocator_func_data(manager, params);
+  } break;
+  case REF_VAL_NUMBER: {
+    ref->data.number = allocator_number_data(manager, params);
   } break;
   default:
     free(ref);
@@ -2749,11 +2775,8 @@ ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
     }
     return v;
   } break;
-  case VAL_BOOL:
-  case VAL_FLOAT:
-  case VAL_INT:
-  case VAL_CHAR:
   case VAL_NULL:
+  case VAL_INT:
   case VAL_OFFSET: {
     ZValue *v = (ZValue *)malloc(sizeof(ZValue));
     v->type = type;
@@ -2786,6 +2809,14 @@ void deallocator_sting_data(MemoryManager *manager, ZString *str) {
   }
   free(str);
   memory_deallocator(manager, sizeof(ZString));
+}
+
+void deallocator_number_data(MemoryManager *manager, ZNumber *number) {
+  if (number == NULL) {
+    return;
+  }
+  free(number);
+  memory_deallocator(manager, sizeof(ZNumber));
 }
 
 void deallocator_func_data(MemoryManager *manager, ZFunction *func) {
@@ -2848,6 +2879,9 @@ void deallocator_ref_data(MemoryManager *manager, ZRefValue *ref) {
   case REF_VAL_STR: {
     deallocator_sting_data(manager, ref->data.str);
   } break;
+  case REF_VAL_NUMBER: {
+    deallocator_number_data(manager, ref->data.number);
+  } break;
   default:
     assert(false);
   }
@@ -2866,12 +2900,8 @@ void deallocator_data(MemoryManager *manager, ZValue *value) {
     free(value);
     memory_deallocator(manager, sizeof(ZValue));
   } break;
-  case VAL_INT:
-  case VAL_BOOL:
-  case VAL_FLOAT:
   case VAL_NULL:
   case VAL_REGISTER:
-  case VAL_CHAR:
   case VAL_OFFSET: {
     free(value);
     memory_deallocator(manager, sizeof(ZValue));
