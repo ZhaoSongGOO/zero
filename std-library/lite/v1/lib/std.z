@@ -357,5 +357,4 @@ func open(p) {
 
 func read(file) { return native_read(file); }
 
-// TODO(To be implemented)
 func close(file) { native_close(file); }
