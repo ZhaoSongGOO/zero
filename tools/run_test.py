@@ -5,7 +5,6 @@ import difflib
 
 # Configuration
 TEST_DIR = "./test"
-EXECUTABLE = "./out/zero"
 
 def get_focused_diff(expected, actual, filename, label):
     """Generates a git-style unified diff."""
@@ -47,14 +46,29 @@ def compare_and_report(name, actual, base_path, extension):
         return "failed"
 
 def run_tests():
-    if not os.path.exists(EXECUTABLE):
-        print(f"Error: Executable '{EXECUTABLE}' not found.")
-        return
+    # --- 1. 获取用户输入的可执行文件路径 ---
+    if len(sys.argv) < 2:
+        print("❌ Error: Missing executable path.")
+        print("Usage: python test_script.py <path_to_executable>")
+        print("Example: python test_script.py ./out/zero")
+        sys.exit(1)
+
+    executable_path = sys.argv[1]
+
+    if not os.path.exists(executable_path):
+        print(f"❌ Error: Executable '{executable_path}' not found.")
+        sys.exit(1)
+
+    # --- 2. 准备测试 ---
+    if not os.path.exists(TEST_DIR):
+        print(f"❌ Error: Test directory '{TEST_DIR}' not found.")
+        sys.exit(1)
 
     test_files = sorted([f for f in os.listdir(TEST_DIR) if f.endswith(".z")])
     stats = {"passed": 0, "failed": 0, "generated": 0}
 
     print(f"--- Zero Lang: Dual-Stage Testing (Stdout & IR) ---")
+    print(f"Using executable: {executable_path}\n")
 
     for file_name in test_files:
         base_name = os.path.splitext(file_name)[0]
@@ -67,8 +81,9 @@ def run_tests():
         print(f"Testing {file_name:20}...", end=" ", flush=True)
 
         try:
+            # --- 3. 运行程序 ---
             result = subprocess.run(
-                [EXECUTABLE, "-i", z_path],
+                [executable_path, "-i", z_path],
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -83,8 +98,6 @@ def run_tests():
                 with open(ir_source_path, "r", encoding="utf-8") as ir_file:
                     ir_status = compare_and_report(file_name, ir_file.read(), ir_base_path, "IR")
             else:
-                # If IR file is missing but .z exists, we consider it a failure 
-                # or a skip depending on your preference.
                 print(f"[ SKIP IR ]", end=" ")
 
             if out_status == "failed" or ir_status == "failed":
@@ -103,6 +116,7 @@ def run_tests():
             print(f"⚠️ ERROR: {e}")
             stats["failed"] += 1
 
+    # --- 4. 打印报告 ---
     print("\n" + "="*45)
     print(f"Final: {stats['passed']} Passed | {stats['failed']} Failed | {stats['generated']} New")
     print("="*45)
