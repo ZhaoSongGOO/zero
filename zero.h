@@ -340,7 +340,11 @@ bool is_keyword(const char *str) {
 struct token scanner_letter(struct scanner *s) {
   unsigned int size = 0;
   unsigned int index = s->index;
-  while (is_letter(s->source->content[index])) {
+  if (is_letter(s->source->content[index])) {
+    size += 1;
+    index += 1;
+  }
+  while (is_letter(s->source->content[index]) || is_number(s->source->content[index])) {
     size += 1;
     index += 1;
   }
