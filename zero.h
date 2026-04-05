@@ -344,7 +344,8 @@ struct token scanner_letter(struct scanner *s) {
     size += 1;
     index += 1;
   }
-  while (is_letter(s->source->content[index]) || is_number(s->source->content[index])) {
+  while (is_letter(s->source->content[index]) ||
+         is_number(s->source->content[index])) {
     size += 1;
     index += 1;
   }
@@ -2532,7 +2533,6 @@ void expression_object_visitor(struct syntax_expr *expr) {
 typedef enum {
   VAL_INT,
   VAL_FLOAT,
-  VAL_STR_INDEX,
   VAL_BOOL,
   VAL_CHAR,
   VAL_REF,
@@ -2754,8 +2754,7 @@ ZValue *allocator_data(MemoryManager *manager, int type, int ref_type,
   case VAL_INT:
   case VAL_CHAR:
   case VAL_NULL:
-  case VAL_OFFSET:
-  case VAL_STR_INDEX: {
+  case VAL_OFFSET: {
     ZValue *v = (ZValue *)malloc(sizeof(ZValue));
     v->type = type;
     memory_allocator(manager, sizeof(ZValue));
@@ -2871,7 +2870,6 @@ void deallocator_data(MemoryManager *manager, ZValue *value) {
   case VAL_BOOL:
   case VAL_FLOAT:
   case VAL_NULL:
-  case VAL_STR_INDEX:
   case VAL_REGISTER:
   case VAL_CHAR:
   case VAL_OFFSET: {
@@ -3532,9 +3530,6 @@ void print_data(VM *vm, ZValue *v) {
   case VAL_FLOAT:
     printf("%f", v->data.f_val);
     break;
-  case VAL_STR_INDEX: {
-    printf("%s", vm->cvalues->get(vm->cvalues, v->data.i_val));
-  } break;
   case VAL_BOOL: {
     if (v->data.b_val) {
       printf("true");
@@ -3680,16 +3675,6 @@ void native_new_array(VM *vm) {
 5:2  <---- sp
 */
 
-ZValue *str_index_to_string_ref(VM *vm, ZValue *value) {
-  assert(value->type == VAL_STR_INDEX);
-  const char *vs = vm->cvalues->get(vm->cvalues, value->data.i_val);
-  ZValue *result =
-      allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
-                     &(AllocatorParams){.str.str_length = strlen(vs) + 1});
-  memcpy(((ZRefValue *)result->data.ptr)->data.str->c_str, vs, strlen(vs) + 1);
-  return result;
-}
-
 void native_new_object(VM *vm) {
   ZValue *count = vm->stacks[vm->sp];
   assert(count->type == VAL_INT);
@@ -3700,14 +3685,15 @@ void native_new_object(VM *vm) {
   for (int i = 0; i < obj->count; i++) {
     int stack_base = vm->sp - obj->count * 2;
     ZValue *key = vm->stacks[stack_base + i * 2];
-    assert(key->type == VAL_STR_INDEX);
+    assert(key->type == VAL_REF);
+    ZRefValue *key_ref = (ZRefValue *)key->data.ptr;
+    assert(key_ref->type == REF_VAL_STR);
     ZValue *value = vm->stacks[stack_base + i * 2 + 1];
-    obj->entries[i].key = vm->cvalues->get(vm->cvalues, key->data.i_val);
-    if (value->type == VAL_STR_INDEX) {
-      obj->entries[i].value = str_index_to_string_ref(vm, value);
-    } else {
-      obj->entries[i].value = copy(vm, value);
-    }
+    obj->entries[i].key =
+        (char *)malloc(sizeof(char) * (strlen(key_ref->data.str->c_str) + 1));
+    memcpy(obj->entries[i].key, key_ref->data.str->c_str,
+           strlen(key_ref->data.str->c_str) + 1);
+    obj->entries[i].value = copy(vm, value);
   }
   ZValue *i = allocator_data(vm->mm, VAL_REF, 0,
                              &(AllocatorParams){.ref.is_shell = true});
@@ -3753,20 +3739,14 @@ void native_string_concat(VM *vm) {
   ZValue *src = vm->stacks[vm->sp - 1];
   ZValue *target = vm->stacks[vm->sp];
 
-  assert(src->type == VAL_REF || src->type == VAL_STR_INDEX);
+  assert(src->type == VAL_REF);
   assert(target->type == VAL_REF);
 
   ZRefValue *tref = (ZRefValue *)target->data.ptr;
   assert(tref->type == REF_VAL_STR);
 
-  const char *src_str = NULL;
-  if (src->type == VAL_REF) {
-    ZRefValue *sref = (ZRefValue *)src->data.ptr;
-    assert(sref->type == REF_VAL_STR);
-    src_str = sref->data.str->c_str;
-  } else {
-    src_str = vm->cvalues->get(vm->cvalues, src->data.i_val);
-  }
+  ZRefValue *sref = (ZRefValue *)src->data.ptr;
+  const char *src_str = sref->data.str->c_str;
 
   if (src_str == NULL || strlen(src_str) == 0) {
     return;
@@ -3874,8 +3854,10 @@ void native_vector_get(VM *vm) {
 
 void native_open(VM *vm) {
   ZValue *v = vm->stacks[vm->sp];
-  assert(v->type == VAL_STR_INDEX);
-  const char *file_name = vm->cvalues->get(vm->cvalues, v->data.i_val);
+  assert(v->type == VAL_REF);
+  ZRefValue *v_ref = (ZRefValue *)v->data.ptr;
+  assert(v_ref->type == REF_VAL_STR);
+  const char *file_name = v_ref->data.str->c_str;
   assert(file_name != NULL);
   if (file_name == NULL || strlen(file_name) == 0) {
     map_insert(vm->registers, "ei", allocator_data(vm->mm, VAL_NULL, 0, NULL));
@@ -3895,8 +3877,10 @@ void native_panic(VM *vm) {
   ZValue *code = vm->stacks[vm->sp];
   ZValue *msg = vm->stacks[vm->sp - 1];
   assert(code->type == VAL_INT);
-  assert(msg->type == VAL_STR_INDEX);
-  printf("[PANIC]:%s\n", vm->cvalues->get(vm->cvalues, msg->data.i_val));
+  assert(msg->type == VAL_REF);
+  ZRefValue *msg_ref = (ZRefValue *)msg->data.ptr;
+  assert(msg_ref->type = REF_VAL_STR);
+  printf("[PANIC]:%s\n", msg_ref->data.str->c_str);
   exit(code->data.i_val);
 }
 
@@ -4121,7 +4105,6 @@ ZValue *copy(VM *vm, ZValue *src) {
     return ref;
   } break;
   case VAL_INT:
-  case VAL_STR_INDEX:
   case VAL_BOOL:
   case VAL_CHAR:
   case VAL_FLOAT:
@@ -4143,12 +4126,14 @@ void SET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *prop = vm->stacks[vm->sp - 1];
   ZValue *v = vm->stacks[vm->sp];
   assert(ref->type == VAL_REF);
-  assert(prop->type == VAL_STR_INDEX);
+  assert(prop->type == VAL_REF);
+  ZRefValue *prop_ref = (ZRefValue *)prop->data.ptr;
+  assert(prop_ref->type == REF_VAL_STR);
   ZRefValue *obj_wrapper = (ZRefValue *)ref->data.ptr;
   assert(obj_wrapper->type == REF_VAL_OBJ);
   ZObject *obj = obj_wrapper->data.obj;
 
-  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
+  const char *key = prop_ref->data.str->c_str;
   for (int i = 0; i < obj->count; i++) {
     if (strcmp(obj->entries[i].key, key) == 0) {
       if (v->type == VAL_REF) {
@@ -4178,8 +4163,6 @@ const char *get_type_str(int type) {
     return "float";
   case VAL_BOOL:
     return "bool";
-  case VAL_STR_INDEX:
-    return "string";
   case VAL_REF:
     return "object";
   default:
@@ -4208,8 +4191,7 @@ void CHECK_INST_RUN(VM *vm, ZValue *value) {
         return;
       }
     }
-    ZERO_ASSERT(need_check->type == VAL_STR_INDEX,
-                "expected type is string, but get %s",
+    ZERO_ASSERT(false, "expected type is string, but get %s",
                 get_type_str(need_check->type));
   } else if (type == TYPE_OBJ || type == TYPE_CUSTOM) {
     ZERO_ASSERT(need_check->type == VAL_REF,
@@ -4254,19 +4236,21 @@ ZValue *object_prop_get(VM *vm, ZObject *raw_obj, const char *key) {
 void GET_INST_RUN(VM *vm, ZValue *value) {
   ZValue *obj_ref = vm->stacks[vm->sp - 1];
   ZValue *prop = vm->stacks[vm->sp];
-  const char *key = vm->cvalues->get(vm->cvalues, prop->data.i_val);
+  assert(prop->type == VAL_REF);
+  ZRefValue *prop_ref = (ZRefValue *)prop->data.ptr;
+  assert(prop_ref->type == REF_VAL_STR);
+  const char *key = prop_ref->data.str->c_str;
   assert(obj_ref->type == VAL_REF);
-  assert(prop->type = VAL_STR_INDEX);
   ZRefValue *obj = (ZRefValue *)obj_ref->data.ptr;
   assert(obj->type == REF_VAL_OBJ);
   ZObject *raw_obj = obj->data.obj;
   ZObject *re = object_prop_get(vm, raw_obj, key);
-  deallocator_data(vm->mm, obj_ref);
-  deallocator_data(vm->mm, prop);
   if (re == NULL) {
     re = object_prop_get(vm, raw_obj->prototype, key);
   }
   if (re != NULL) {
+    deallocator_data(vm->mm, obj_ref);
+    deallocator_data(vm->mm, prop);
     vm->stacks[--(vm->sp)] = re;
   } else {
     assert(false);
@@ -4555,9 +4539,13 @@ INSTRUCTION *NEW_PUSH_B_INSTRUCTION(VM *vm, const char *value) {
 }
 
 INSTRUCTION *NEW_PUSH_S_INSTRUCTION(VM *vm, const char *value) {
-  ZValue *v = allocator_data(vm->mm, VAL_STR_INDEX, 0, NULL);
+  ZValue *v =
+      allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
+                     &(AllocatorParams){.str.str_length = strlen(value) + 1});
   vm->cvalues->push(vm->cvalues, value);
-  v->data.i_val = vm->cvalues->count - 1;
+  ZRefValue *ref = (ZRefValue *)v->data.ptr;
+  memcpy(ref->data.str->c_str, value, strlen(value));
+  ref->data.str->c_str[strlen(value)] = '\0';
   return new_inst(I_PUSH, v);
 }
 
