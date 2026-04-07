@@ -6,31 +6,33 @@ import difflib
 # Configuration
 TEST_DIR = "./test"
 
+
 def get_focused_diff(expected, actual, filename, label):
     """Generates a git-style unified diff."""
     expected_lines = expected.splitlines(keepends=True)
     actual_lines = actual.splitlines(keepends=True)
-    
+
     diff = difflib.unified_diff(
-        expected_lines, 
-        actual_lines, 
-        fromfile=f"{filename} (baseline)", 
+        expected_lines,
+        actual_lines,
+        fromfile=f"{filename} (baseline)",
         tofile=f"{filename} (actual {label})",
-        n=2  # Number of context lines around the change
+        n=2,  # Number of context lines around the change
     )
     return "".join(diff)
+
 
 def compare_and_report(name, actual, base_path, extension):
     """Handles comparison and generates focused diffs on failure."""
     # Normalize actual output to ensure consistency
     actual = actual.strip()
-    
+
     if not os.path.exists(base_path):
         with open(base_path, "w", encoding="utf-8") as f:
             f.write(actual)
         print(f"[ NEW {extension} BASELINE ]", end=" ")
         return "generated"
-    
+
     with open(base_path, "r", encoding="utf-8") as f:
         expected = f.read().strip()
 
@@ -44,6 +46,7 @@ def compare_and_report(name, actual, base_path, extension):
         print(diff_output if diff_output else "Content differs in whitespace/encoding.")
         print("=" * 50)
         return "failed"
+
 
 def run_tests():
     # --- 1. 获取用户输入的可执行文件路径 ---
@@ -74,7 +77,7 @@ def run_tests():
         base_name = os.path.splitext(file_name)[0]
         z_path = os.path.join(TEST_DIR, file_name)
         ir_source_path = os.path.join(TEST_DIR, f"{base_name}.ir")
-        
+
         out_base_path = os.path.join(TEST_DIR, f"{base_name}.out.base")
         ir_base_path = os.path.join(TEST_DIR, f"{base_name}.ir.base")
 
@@ -86,17 +89,21 @@ def run_tests():
                 [executable_path, "-i", z_path],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
-            
+
             # Stage 1: Stdout
-            out_status = compare_and_report(file_name, result.stdout, out_base_path, "OUT")
-            
+            out_status = compare_and_report(
+                file_name, result.stdout, out_base_path, "OUT"
+            )
+
             # Stage 2: IR
             ir_status = "passed"
             if os.path.exists(ir_source_path):
                 with open(ir_source_path, "r", encoding="utf-8") as ir_file:
-                    ir_status = compare_and_report(file_name, ir_file.read(), ir_base_path, "IR")
+                    ir_status = compare_and_report(
+                        file_name, ir_file.read(), ir_base_path, "IR"
+                    )
             else:
                 print(f"[ SKIP IR ]", end=" ")
 
@@ -108,7 +115,7 @@ def run_tests():
             else:
                 stats["passed"] += 1
                 print("✅")
-            
+
         except subprocess.TimeoutExpired:
             print("⏰ TIMEOUT")
             stats["failed"] += 1
@@ -117,12 +124,15 @@ def run_tests():
             stats["failed"] += 1
 
     # --- 4. 打印报告 ---
-    print("\n" + "="*45)
-    print(f"Final: {stats['passed']} Passed | {stats['failed']} Failed | {stats['generated']} New")
-    print("="*45)
+    print("\n" + "=" * 45)
+    print(
+        f"Final: {stats['passed']} Passed | {stats['failed']} Failed | {stats['generated']} New"
+    )
+    print("=" * 45)
 
     if stats["failed"] > 0:
         sys.exit(1)
+
 
 if __name__ == "__main__":
     run_tests()

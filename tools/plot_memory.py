@@ -16,9 +16,9 @@ sample_interval = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 # 读取日志文件
 bytes_values = []
 
-with open(log_file, 'r') as f:
+with open(log_file, "r") as f:
     for line in f:
-        match = re.search(r'Memory\s+(\d+)\s+Byte', line)
+        match = re.search(r"Memory\s+(\d+)\s+Byte", line)
         if match:
             bytes_values.append(int(match.group(1)))
 
@@ -34,10 +34,17 @@ else:
 
 # 绘制曲线图
 plt.figure(figsize=(14, 7))
-plt.plot(range(len(sampled_values)), sampled_values, marker='.', linestyle='-', linewidth=1, markersize=3)
-plt.xlabel('Time (samples)')
-plt.ylabel('Memory (Bytes)')
-plt.title(f'Memory Usage Over Time - {log_file}')
+plt.plot(
+    range(len(sampled_values)),
+    sampled_values,
+    marker=".",
+    linestyle="-",
+    linewidth=1,
+    markersize=3,
+)
+plt.xlabel("Time (samples)")
+plt.ylabel("Memory (Bytes)")
+plt.title(f"Memory Usage Over Time - {log_file}")
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 
