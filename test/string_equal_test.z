@@ -1,5 +1,0 @@
-include("std-library/lite/v1/lib/std-lite-v1");
-func main() {
-  var s = String("Hello World\n");
-  print(s.substr(0, 1).equal(s.substr(0, 1)));
-}

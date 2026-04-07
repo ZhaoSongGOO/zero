@@ -1,13 +1,5 @@
-include("std-library/lite/v1/lib/std-lite-v1");
+
 func main() {
-  var row = Vector();
-  row.push(1);
-  row.push(2);
-  row.push(3);
-  var matrix = Vector();
-  matrix.push(row);
-  matrix.push(row);
-  matrix.push(row);
-  print(matrix.get(1).get(1));
-  print(matrix);
+  var s = "hello";
+  native_print(s);
 }
