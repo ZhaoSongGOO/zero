@@ -3780,7 +3780,7 @@ void zero_hash(VM *vm) {
 }
 
 void native_string_len(VM *vm) {
-  ZValue *str = vm->stacks[vm->sp];
+  ZValue *str = vm->stacks[vm->sp - 1];
   assert(str->type == VAL_REF);
   ZRefValue *ref = (ZRefValue *)str->data.ptr;
   assert(ref->type == REF_VAL_STR);
@@ -3798,8 +3798,8 @@ void native_string_len(VM *vm) {
 }
 
 void native_string_equal(VM *vm) {
-  ZValue *ls = vm->stacks[vm->sp];
-  ZValue *rs = vm->stacks[vm->sp - 1];
+  ZValue *ls = vm->stacks[vm->sp - 2];
+  ZValue *rs = vm->stacks[vm->sp];
   assert(ls->type == VAL_REF);
   assert(rs->type == VAL_REF);
   ZRefValue *lref = (ZRefValue *)ls->data.ptr;
@@ -3821,8 +3821,8 @@ void native_string_equal(VM *vm) {
 }
 
 void native_string_concat(VM *vm) {
-  ZValue *src = vm->stacks[vm->sp - 1];
-  ZValue *target = vm->stacks[vm->sp];
+  ZValue *src = vm->stacks[vm->sp];
+  ZValue *target = vm->stacks[vm->sp - 2];
 
   assert(src->type == VAL_REF);
   assert(target->type == VAL_REF);
@@ -3862,15 +3862,15 @@ void native_string_concat(VM *vm) {
 }
 
 void native_string_substr(VM *vm) {
-  ZValue *str = vm->stacks[vm->sp];
-  ZValue *start = vm->stacks[vm->sp - 1];
-  ZValue *size = vm->stacks[vm->sp - 2];
+  ZValue *str = vm->stacks[vm->sp - 3];
+  ZValue *start = vm->stacks[vm->sp];
+  ZValue *size = vm->stacks[vm->sp - 1];
   assert(str->type == VAL_REF);
   assert(start->type == VAL_INT);
   assert(size->type == VAL_INT);
   ZRefValue *ref = (ZRefValue *)str->data.ptr;
   assert(ref->type == REF_VAL_STR);
-  ZValue *src_value = object_prop_get(vm, ref, "value");
+  ZValue *src_value = object_prop_get(vm, ref->data.obj, "value");
   if (src_value == NULL) {
     ZValue *ret = allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
                                  &(AllocatorParams){.str.str_length = 1});
@@ -3898,11 +3898,14 @@ void native_string_substr(VM *vm) {
   ZValue *ret =
       allocator_data(vm->mm, VAL_REF, REF_VAL_STR,
                      &(AllocatorParams){.str.str_length = size_value + 1});
-  ZValue *ret_value = object_prop_get(vm, ref->data.obj, "value");
+  assert(ret != NULL && ret->type == VAL_REF);
+  ZRefValue *ret_ref = (ZRefValue *)ret->data.ptr;
+  ZValue *ret_value = object_prop_get(vm, ret_ref->data.obj, "value");
   assert(ret_value != NULL && ret_value->type == VAL_REF);
   ZRefValue *ret_value_ref = (ZRefValue *)ret_value->data.ptr;
+  assert(ret_value_ref->type == REF_VAL_STR_RAW);
   memcpy(ret_value_ref->data.rstring->raw,
-         ((char *)src_value->data.ptr) + start_index, size_value);
+         (src_value_ref->data.rstring->raw) + start_index, size_value);
 
   map_insert(vm->registers, "ei", ret);
   deallocator_data(vm->mm, src_value);
@@ -4392,7 +4395,7 @@ void GET_INST_RUN(VM *vm, ZValue *value) {
   const char *key = prop_value_ref->data.rstring->raw;
   assert(obj_ref->type == VAL_REF);
   ZRefValue *obj = (ZRefValue *)obj_ref->data.ptr;
-  assert(obj->type == REF_VAL_OBJ);
+  assert(obj->type == REF_VAL_OBJ || obj->type == REF_VAL_STR);
   ZObject *raw_obj = obj->data.obj;
   ZObject *re = object_prop_get(vm, raw_obj, key);
   if (re == NULL) {

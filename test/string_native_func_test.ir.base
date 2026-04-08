@@ -1,0 +1,84 @@
+__init__:
+main:
+  PUSH_S hello
+  STORE #1
+  LOAD #1
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S len
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S substr
+  GET
+  PUSH_D 3
+  PUSH_D 0
+  CALL -2
+  FREE 4
+  LOAD [ei]
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S equal
+  GET
+  PUSH_S hello
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S equal
+  GET
+  PUSH_S hel
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  COPY
+  PUSH_S concat
+  GET
+  PUSH_S  world!
+  CALL -1
+  FREE 3
+  LOAD [ei]
+  FREE 1
+  LOAD #1
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
+  PUSH_S 
+  STORE #2
+  LOAD #2
+  COPY
+  PUSH_S len
+  GET
+  CALL -0
+  FREE 2
+  LOAD [ei]
+  CALL native_println
+  FREE 1
+  LOAD [ei]
+  FREE 1
