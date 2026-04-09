@@ -36,7 +36,7 @@ func assert(condition, msg) {
  * Boolean value wrapper type with string representation and hash support
  */
 typedef __bool_ref {
-value:
+__data__:
   bool;
 __str__:
   object;
@@ -47,13 +47,13 @@ __hash__:
 /*
  * Prints boolean as string ("true" or "false")
  */
-func __bool_print() { native_print(this.value); }
+func __bool_print() { native_print(this.__data__); }
 
 /*
  * Returns boolean value for use as hash key
  * @return: The underlying boolean value
  */
-func __bool_hash() { return this.value; }
+func __bool_hash() { return this.__data__; }
 
 /*
  * Bool constructor - wraps a raw boolean into __bool_ref object
@@ -61,7 +61,7 @@ func __bool_hash() { return this.value; }
  * @return: __bool_ref object
  */
 func Bool(a) {
-  return new __bool_ref{value = a, __str__ = __bool_print,
+  return new __bool_ref{__data__ = a, __str__ = __bool_print,
                         __hash__ = __bool_hash};
 }
 
@@ -70,7 +70,7 @@ func Bool(a) {
  * Integer value wrapper type with string representation and hash support
  */
 typedef __int_ref {
-value:
+__data__:
   int;
 __str__:
   object;
@@ -81,13 +81,13 @@ __hash__:
 /*
  * Prints integer value
  */
-func __int_print() { native_print(this.value); }
+func __int_print() { native_print(this.__data__); }
 
 /*
  * Returns integer value for use as hash key
  * @return: The underlying integer value
  */
-func __int_hash() { return this.value; }
+func __int_hash() { return this.__data__; }
 
 /*
  * Int constructor - wraps a raw integer into __int_ref object
@@ -95,7 +95,7 @@ func __int_hash() { return this.value; }
  * @return: __int_ref object
  */
 func Int(a) {
-  return new __int_ref{value = a, __str__ = __int_print, __hash__ = __int_hash};
+  return new __int_ref{__data__ = a, __str__ = __int_print, __hash__ = __int_hash};
 }
 
 /* ============== Vector Type ============== */

@@ -3437,6 +3437,34 @@ void MULTI_INST_RUN(VM *vm, ZValue *value) {
   vm->stacks[--(vm->sp)] = result;
 }
 
+ZValue *object_prop_get(VM *vm, ZObject *raw_obj, const char *key);
+
+float get_number_value_from_object(VM *vm, ZObject *obj) {
+  ZValue *number = object_prop_get(vm, obj, "__data__");
+  if (number == NULL) {
+    return (int)obj;
+  }
+  float r = (int)obj;
+  switch (number->type) {
+  case VAL_BOOL:
+    r = number->data.b_val;
+    break;
+  case VAL_FLOAT:
+    r = number->data.f_val;
+    break;
+  case VAL_INT:
+    r = number->data.i_val;
+    break;
+  case VAL_CHAR:
+    r = number->data.c_val;
+    break;
+  default:
+    break;
+  }
+  deallocator_data(vm->mm, number);
+  return r;
+}
+
 float get_number_value_from_zvalue(VM *vm, ZValue *v) {
   if (v->type == VAL_INT) {
     return v->data.i_val;
@@ -3445,7 +3473,12 @@ float get_number_value_from_zvalue(VM *vm, ZValue *v) {
   } else if (v->type == VAL_BOOL) {
     return v->data.b_val;
   } else if (v->type == VAL_REF) {
-    return (int)v->data.ptr;
+    ZRefValue *ref = (ZRefValue *)v->data.ptr;
+    if (ref->type != REF_VAL_OBJ) {
+      return (int)v->data.ptr;
+    } else {
+      return get_number_value_from_object(vm, ref->data.obj);
+    }
   } else if (v->type == VAL_NULL) {
     return 0;
   } else if (v->type == VAL_CHAR) {
@@ -3570,7 +3603,6 @@ void FREE_INST_RUN(VM *vm, ZValue *value) {
 
 void print_string(VM *vm, ZValue *value);
 void print_ref(VM *vm, ZValue *v);
-ZValue *object_prop_get(VM *vm, ZObject *raw_obj, const char *key);
 
 void print_data(VM *vm, ZValue *v) {
   switch (v->type) {
